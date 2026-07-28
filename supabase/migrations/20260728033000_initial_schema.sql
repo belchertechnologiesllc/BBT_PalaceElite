@@ -727,8 +727,8 @@ grant select on public.benefit_balances to authenticated;
 -- above, which execute with the function owner's privileges regardless of
 -- the caller's table grants (requirement 8).
 
-grant select, insert on public.reservations to authenticated;
-grant select, insert on public.benefit_transactions to authenticated;
+grant select, insert, update on public.reservations to authenticated;
+grant select, insert, update on public.benefit_transactions to authenticated;
 grant select, insert, update on public.benefit_grants to authenticated;
 grant select on public.memberships to authenticated;
 grant select on public.ownership_units to authenticated;

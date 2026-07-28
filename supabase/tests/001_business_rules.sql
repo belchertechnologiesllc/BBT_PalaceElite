@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(15);
+select plan(16);
 
 -- =============================================================================
 -- Test helper: return true when a SQL statement raises any exception.

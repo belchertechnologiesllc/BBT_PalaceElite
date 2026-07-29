@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { LoginScreen } from './auth/LoginScreen';
 import { useAuth } from './auth/AuthProvider';
+import { MembersPage } from './pages/MembersPage';
 
 type NavigationItem = 'Dashboard' | 'Members' | 'Benefits' | 'Transactions' | 'Reservations' | 'Profile' | 'Administration';
 
@@ -360,14 +361,16 @@ export default function App() {
         )}
 
         <main className="page-content">
-          {activePage === 'Dashboard' ? (
-            <Dashboard />
-          ) : activePage === 'Profile' ? (
-            <ProfilePage />
-          ) : (
-            <PlaceholderPage page={activePage} />
-          )}
-        </main>
+  {activePage === 'Dashboard' ? (
+    <Dashboard />
+  ) : activePage === 'Members' ? (
+    <MembersPage />
+  ) : activePage === 'Profile' ? (
+    <ProfilePage />
+  ) : (
+    <PlaceholderPage page={activePage} />
+  )}
+</main>
       </div>
     </div>
   );

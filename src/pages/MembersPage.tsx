@@ -1,0 +1,264 @@
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
+
+type OwnershipUnitRecord = {
+  id: string;
+  name: string;
+  participates_in_golf_pool: boolean;
+};
+
+type PersonRecord = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  preferred_name: string | null;
+  relationship_to_primary: string | null;
+  person_role: string;
+  profile_id: string | null;
+  participates_in_shared_pool: boolean;
+  participates_in_golf_pool: boolean;
+  ownership_unit_id: string;
+  ownership_unit: OwnershipUnitRecord;
+};
+
+type OwnershipUnitGroup = {
+  unit: OwnershipUnitRecord;
+  people: PersonRecord[];
+};
+
+const formatRole = (role: string) =>
+  role
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+function PoolBadge({
+  label,
+  active,
+}: {
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <span className={`eligibility-badge ${active ? 'active' : 'inactive'}`}>
+      {label}: {active ? 'Yes' : 'No'}
+    </span>
+  );
+}
+
+export function MembersPage() {
+  const [people, setPeople] = useState<PersonRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPeople = async () => {
+      setLoading(true);
+      setErrorMessage(null);
+
+      if (!supabase) {
+        setErrorMessage('Supabase is not configured.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('people')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          preferred_name,
+          relationship_to_primary,
+          person_role,
+          profile_id,
+          participates_in_shared_pool,
+          participates_in_golf_pool,
+          ownership_unit_id,
+          ownership_unit:ownership_units!people_ownership_unit_id_fkey (
+            id,
+            name,
+            participates_in_golf_pool
+          )
+        `)
+        .is('archived_at', null)
+        .order('last_name')
+        .order('first_name');
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setErrorMessage(error.message);
+        setPeople([]);
+      } else {
+        setPeople(data ?? []);
+      }
+
+      setLoading(false);
+    };
+
+    void loadPeople();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ownershipUnits = useMemo<OwnershipUnitGroup[]>(() => {
+    const groups = new Map<string, OwnershipUnitGroup>();
+
+    for (const person of people) {
+      const unit = person.ownership_unit;
+
+      const existingGroup = groups.get(unit.id);
+
+      if (existingGroup) {
+        existingGroup.people.push(person);
+      } else {
+        groups.set(unit.id, {
+          unit,
+          people: [person],
+        });
+      }
+    }
+
+    return Array.from(groups.values()).sort((a, b) =>
+      a.unit.name.localeCompare(b.unit.name),
+    );
+  }, [people]);
+
+  return (
+    <>
+      <section className="page-heading">
+        <div>
+          <p className="eyebrow">Membership Structure</p>
+          <h2>Members</h2>
+          <p className="subtitle">
+            Ownership units, family members, account linkage, and benefit-pool
+            eligibility.
+          </p>
+        </div>
+
+        <button type="button" disabled>
+          Add person
+        </button>
+      </section>
+
+      {loading && (
+        <section className="panel members-status">
+          <p>Loading members…</p>
+        </section>
+      )}
+
+      {!loading && errorMessage && (
+        <section className="panel members-status error-state" role="alert">
+          <p className="eyebrow">Unable to load members</p>
+          <h3>Supabase returned an error</h3>
+          <p>{errorMessage}</p>
+        </section>
+      )}
+
+      {!loading && !errorMessage && ownershipUnits.length === 0 && (
+        <section className="panel members-status">
+          <p className="eyebrow">No records</p>
+          <h3>No members are available</h3>
+          <p>
+            Confirm that the signed-in account has access to an ownership unit.
+          </p>
+        </section>
+      )}
+
+      {!loading &&
+        !errorMessage &&
+        ownershipUnits.map(({ unit, people: unitPeople }) => (
+          <section className="panel ownership-unit-panel" key={unit.id}>
+            <div className="panel-heading ownership-unit-heading">
+              <div>
+                <p className="eyebrow">Ownership Unit</p>
+                <h3>{unit.name}</h3>
+                <p>
+                  {unitPeople.length}{' '}
+                  {unitPeople.length === 1 ? 'person' : 'people'}
+                </p>
+              </div>
+
+              <span
+                className={`pool-tag ${
+                  unit.participates_in_golf_pool ? 'golf' : 'shared'
+                }`}
+              >
+                {unit.participates_in_golf_pool
+                  ? 'Shared + Golf'
+                  : 'Shared Only'}
+              </span>
+            </div>
+
+            <div className="member-card-grid">
+              {unitPeople.map((person) => {
+                const displayName =
+                  person.preferred_name?.trim() ||
+                  `${person.first_name} ${person.last_name}`;
+
+                return (
+                  <article className="member-card" key={person.id}>
+                    <div className="member-card-header">
+                      <div
+                        className="member-avatar"
+                        aria-hidden="true"
+                      >
+                        {displayName.charAt(0).toUpperCase()}
+                      </div>
+
+                      <div>
+                        <h4>{displayName}</h4>
+                        <p>{formatRole(person.person_role)}</p>
+                      </div>
+                    </div>
+
+                    <dl className="member-details">
+                      <div>
+                        <dt>Legal name</dt>
+                        <dd>
+                          {person.first_name} {person.last_name}
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt>Relationship</dt>
+                        <dd>
+                          {person.relationship_to_primary || 'Not specified'}
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt>Application login</dt>
+                        <dd>
+                          {person.profile_id ? 'Linked' : 'Not linked'}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    <div className="member-eligibility">
+                      <PoolBadge
+                        label="Shared"
+                        active={person.participates_in_shared_pool}
+                      />
+
+                      <PoolBadge
+                        label="Golf"
+                        active={person.participates_in_golf_pool}
+                      />
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+    </>
+  );
+}

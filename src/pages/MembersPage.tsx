@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getActivePeople,
   type OwnershipUnitRecord,
   type PersonRecord,
 } from '../services/peopleService';
+import { PageHeader } from '../components/layout/PageHeader';
+import { SlideOver } from '../components/forms/SlideOver';
 
 type OwnershipUnitGroup = {
   unit: OwnershipUnitRecord;
@@ -31,6 +33,7 @@ function PoolBadge({
 }
 
 export function MembersPage() {
+  const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -83,24 +86,51 @@ useEffect(() => {
 
   return (
     <>
-      <section className="page-heading">
-        <div>
-          <p className="eyebrow">Membership Structure</p>
-          <h2>Members</h2>
-          <p className="subtitle">
-            Ownership units, family members, account linkage, and benefit-pool
-            eligibility.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Membership Structure"
+        title="Members"
+        subtitle="Ownership units, family members, account linkage, and benefit-pool eligibility."
+        actions={
+          <button
+            type="button"
+            onClick={() => setIsAddPersonOpen(true)}
+          >
+            Add person
+          </button>
+        }
+      />
 
-        <button type="button" disabled>
-          Add person
-        </button>
-      </section>
+      <SlideOver
+        open={isAddPersonOpen}
+        title="Add Person"
+        width="md"
+        onClose={() => setIsAddPersonOpen(false)}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setIsAddPersonOpen(false)}
+            >
+              Cancel
+            </button>
+
+            <button type="button" disabled>
+              Save person
+            </button>
+          </>
+        }
+      >
+        <p>The Add Person form will be added here next.</p>
+
+        <p className="subtitle">
+          This panel will collect the person's name, ownership unit,
+          relationship, role, and benefit-pool participation.
+        </p>
+      </SlideOver>
 
       {loading && (
         <section className="panel members-status">
-          <p>Loading members…</p>
+          <p>Loading members...</p>
         </section>
       )}
 
@@ -212,3 +242,5 @@ useEffect(() => {
     </>
   );
 }
+
+

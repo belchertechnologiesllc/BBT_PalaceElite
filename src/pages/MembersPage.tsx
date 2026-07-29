@@ -1,25 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabase';
-
-type OwnershipUnitRecord = {
-  id: string;
-  name: string;
-  participates_in_golf_pool: boolean;
-};
-
-type PersonRecord = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  preferred_name: string | null;
-  relationship_to_primary: string | null;
-  person_role: string;
-  profile_id: string | null;
-  participates_in_shared_pool: boolean;
-  participates_in_golf_pool: boolean;
-  ownership_unit_id: string;
-  ownership_unit: OwnershipUnitRecord;
-};
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  getActivePeople,
+  type OwnershipUnitRecord,
+  type PersonRecord,
+} from '../services/peopleService';
 
 type OwnershipUnitGroup = {
   unit: OwnershipUnitRecord;
@@ -51,62 +35,28 @@ export function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadPeople = useCallback(async () => {
+  setLoading(true);
+  setErrorMessage(null);
 
-    const loadPeople = async () => {
-      setLoading(true);
-      setErrorMessage(null);
+  try {
+    const records = await getActivePeople();
+    setPeople(records);
+  } catch (error) {
+    setPeople([]);
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : 'Unable to load members.',
+    );
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
-      if (!supabase) {
-        setErrorMessage('Supabase is not configured.');
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('people')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          preferred_name,
-          relationship_to_primary,
-          person_role,
-          profile_id,
-          participates_in_shared_pool,
-          participates_in_golf_pool,
-          ownership_unit_id,
-          ownership_unit:ownership_units!people_ownership_unit_id_fkey (
-            id,
-            name,
-            participates_in_golf_pool
-          )
-        `)
-        .is('archived_at', null)
-        .order('last_name')
-        .order('first_name');
-
-      if (cancelled) {
-        return;
-      }
-
-      if (error) {
-        setErrorMessage(error.message);
-        setPeople([]);
-      } else {
-        setPeople(data ?? []);
-      }
-
-      setLoading(false);
-    };
-
-    void loadPeople();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+useEffect(() => {
+  void loadPeople();
+}, [loadPeople]);
 
   const ownershipUnits = useMemo<OwnershipUnitGroup[]>(() => {
     const groups = new Map<string, OwnershipUnitGroup>();

@@ -6,6 +6,10 @@ import {
 } from '../services/peopleService';
 import { PageHeader } from '../components/layout/PageHeader';
 import { SlideOver } from '../components/forms/SlideOver';
+import {
+  ADD_PERSON_FORM_ID,
+  AddPersonForm,
+} from '../components/forms/AddPersonForm';
 
 type OwnershipUnitGroup = {
   unit: OwnershipUnitRecord;
@@ -34,9 +38,14 @@ function PoolBadge({
 
 export function MembersPage() {
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+  const [addPersonFormState, setAddPersonFormState] = useState({
+    canSubmit: false,
+    submitting: false,
+  });
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   const loadPeople = useCallback(async () => {
   setLoading(true);
@@ -57,9 +66,32 @@ export function MembersPage() {
   }
 }, []);
 
-useEffect(() => {
-  void loadPeople();
-}, [loadPeople]);
+  const handlePersonSaved = useCallback(
+    async (personName: string) => {
+      setIsAddPersonOpen(false);
+      setSuccessToast(`${personName} added successfully.`);
+      await loadPeople();
+    },
+    [loadPeople],
+  );
+
+  useEffect(() => {
+    void loadPeople();
+  }, [loadPeople]);
+
+  useEffect(() => {
+    if (!successToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccessToast(null);
+    }, 3500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [successToast]);
 
   const ownershipUnits = useMemo<OwnershipUnitGroup[]>(() => {
     const groups = new Map<string, OwnershipUnitGroup>();
@@ -114,18 +146,23 @@ useEffect(() => {
               Cancel
             </button>
 
-            <button type="button" disabled>
-              Save person
+            <button
+              type="submit"
+              form={ADD_PERSON_FORM_ID}
+              disabled={!addPersonFormState.canSubmit}
+            >
+              {addPersonFormState.submitting
+                ? 'Saving...'
+                : 'Save person'}
             </button>
           </>
         }
       >
-        <p>The Add Person form will be added here next.</p>
-
-        <p className="subtitle">
-          This panel will collect the person's name, ownership unit,
-          relationship, role, and benefit-pool participation.
-        </p>
+        <AddPersonForm
+          open={isAddPersonOpen}
+          onSaved={handlePersonSaved}
+          onFormStateChange={setAddPersonFormState}
+        />
       </SlideOver>
 
       {loading && (
@@ -242,5 +279,3 @@ useEffect(() => {
     </>
   );
 }
-
-

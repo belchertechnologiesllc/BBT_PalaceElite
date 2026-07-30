@@ -54,3 +54,43 @@ export async function getActivePeople(): Promise<PersonRecord[]> {
 
   return data ?? [];
 }
+
+export type CreatePersonInput = {
+  firstName: string;
+  lastName: string;
+  preferredName: string | null;
+  relationshipToPrimary: string | null;
+  personRole: string;
+  membershipId: string;
+  ownershipUnitId: string;
+  participatesInSharedPool: boolean;
+  participatesInGolfPool: boolean;
+  isActive: boolean;
+};
+
+export async function createPerson(
+  input: CreatePersonInput,
+): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const { error } = await supabase
+    .from('people')
+    .insert({
+      first_name: input.firstName.trim(),
+      last_name: input.lastName.trim(),
+      preferred_name: input.preferredName,
+      relationship_to_primary: input.relationshipToPrimary,
+      person_role: input.personRole,
+      membership_id: input.membershipId,
+      ownership_unit_id: input.ownershipUnitId,
+      participates_in_shared_pool: input.participatesInSharedPool,
+      participates_in_golf_pool: input.participatesInGolfPool,
+      is_active: input.isActive,
+    });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}

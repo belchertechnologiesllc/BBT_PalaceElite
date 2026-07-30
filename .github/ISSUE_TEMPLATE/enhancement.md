@@ -1,29 +1,59 @@
 ---
 name: Enhancement
-about: Improve existing functionality in Palace Elite Membership Manager
+about: Improve an existing workflow, interface, or technical capability
 title: "[Enhancement] "
-labels: enhancement
+labels: ["enhancement"]
+assignees: []
 ---
 
-## Current behavior
+## Problem
 
-<!-- What does the feature do today? -->
+Describe the current limitation, inefficiency, usability issue, or technical concern.
 
-## Desired behavior
+## Proposed Improvement
 
-<!-- What should change, and why is it better? -->
+Describe the recommended change and the benefit it would provide.
 
-## Affected areas
+## Alternatives Considered
 
-- [ ] Membership management
-- [ ] Ownership administration
-- [ ] Benefit catalog / pools
-- [ ] Benefit transaction ledger
-- [ ] Accounting / balances
-- [ ] Dashboard / reporting
-- [ ] Users, roles, and security
-- [ ] Other: 
+Describe other approaches considered and why they were not preferred.
 
-## Notes
+## Scope
 
-<!-- Anything relevant: schema impact, dependencies, milestone. -->
+### Included
+
+- 
+- 
+
+### Excluded
+
+- 
+- 
+
+## Acceptance Criteria
+
+- [ ] The improvement addresses the stated problem.
+- [ ] Existing behavior remains compatible unless explicitly changed.
+- [ ] Authorization boundaries remain intact.
+- [ ] Shared and Golf accounting pools remain separate.
+- [ ] Complete transaction and audit history is preserved.
+- [ ] Responsive and accessible behavior is maintained.
+- [ ] Documentation is updated.
+- [ ] Production build succeeds.
+
+## Database / Migration Impact
+
+- [ ] No database changes.
+- [ ] Migration required.
+- [ ] RLS review required.
+- [ ] Data backfill required.
+
+Details:
+
+## Security and Audit Impact
+
+Describe any authentication, authorization, RLS, storage, audit, or sensitive-data implications.
+
+## Testing Notes
+
+Describe the scenarios that should be verified.

@@ -6,17 +6,18 @@
 } from 'react';
 import {
   createPerson,
+  updatePerson,
   type CreatePersonInput,
   type PersonRecord,
+  type UpdatePersonInput,
 } from '../../services/peopleService';
 import {
   getActiveOwnershipUnits,
   type OwnershipUnitOption,
 } from '../../services/ownershipUnitsService';
 
-export const ADD_PERSON_FORM_ID = 'add-person-form';
-
 type PersonFormProps = {
+  formId: string;
   open: boolean;
   mode: 'create' | 'edit';
   person?: PersonRecord | null;
@@ -81,6 +82,7 @@ const optionalText = (value: string) => {
 };
 
 export function PersonForm({
+  formId,
   open,
   mode,
   person,
@@ -203,32 +205,43 @@ export function PersonForm({
     setSubmitting(true);
     setSubmitError(null);
 
-    const input: CreatePersonInput = {
-      firstName: form.firstName,
-      lastName: form.lastName,
-      preferredName: optionalText(form.preferredName),
-      relationshipToPrimary: optionalText(
-        form.relationshipToPrimary,
-      ),
-      personRole: form.personRole,
-      membershipId: selectedUnit.membership_id,
-      ownershipUnitId: selectedUnit.id,
-      participatesInSharedPool: form.participatesInSharedPool,
-      participatesInGolfPool:
-        selectedUnit.participates_in_golf_pool &&
-        form.participatesInGolfPool,
-      isActive: form.isActive,
-    };
-
     try {
-      await createPerson(input);
+      const commonInput = {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        preferredName: optionalText(form.preferredName),
+        relationshipToPrimary: optionalText(
+          form.relationshipToPrimary,
+        ),
+        personRole: form.personRole,
+        membershipId: selectedUnit.membership_id,
+        ownershipUnitId: selectedUnit.id,
+        participatesInSharedPool:
+          form.participatesInSharedPool,
+        participatesInGolfPool:
+          selectedUnit.participates_in_golf_pool &&
+          form.participatesInGolfPool,
+        isActive: form.isActive,
+      };
+
+      if (mode === 'edit' && person) {
+        const input: UpdatePersonInput = {
+          id: person.id,
+          ...commonInput,
+        };
+
+        await updatePerson(input);
+      } else {
+        const input: CreatePersonInput = commonInput;
+
+        await createPerson(input);
+      }
 
       const savedPersonName = [
         form.firstName.trim(),
         form.lastName.trim(),
       ].join(' ');
 
-      setForm(initialFormState);
       await onSaved(savedPersonName);
     } catch (error) {
       setSubmitError(
@@ -243,7 +256,7 @@ export function PersonForm({
 
   return (
     <form
-      id={ADD_PERSON_FORM_ID}
+      id={formId}
       className="person-form"
       onSubmit={handleSubmit}
     >

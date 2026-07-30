@@ -6,10 +6,10 @@ import {
 } from '../services/peopleService';
 import { PageHeader } from '../components/layout/PageHeader';
 import { SlideOver } from '../components/forms/SlideOver';
-import {
-  ADD_PERSON_FORM_ID,
-  PersonForm,
-} from '../components/forms/PersonForm';
+import { PersonForm } from '../components/forms/PersonForm';
+
+const ADD_PERSON_FORM_ID = 'add-person-form';
+const EDIT_PERSON_FORM_ID = 'edit-person-form';
 
 type OwnershipUnitGroup = {
   unit: OwnershipUnitRecord;
@@ -39,6 +39,10 @@ function PoolBadge({
 export function MembersPage() {
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
   const [addPersonFormState, setAddPersonFormState] = useState({
+    canSubmit: false,
+    submitting: false,
+  });
+  const [editPersonFormState, setEditPersonFormState] = useState({
     canSubmit: false,
     submitting: false,
   });
@@ -72,6 +76,15 @@ export function MembersPage() {
     async (personName: string) => {
       setIsAddPersonOpen(false);
       setSuccessToast(`${personName} added successfully.`);
+      await loadPeople();
+    },
+    [loadPeople],
+  );
+
+  const handlePersonUpdated = useCallback(
+    async (personName: string) => {
+      setSelectedPerson(null);
+      setSuccessToast(`${personName} updated successfully.`);
       await loadPeople();
     },
     [loadPeople],
@@ -127,6 +140,7 @@ export function MembersPage() {
         actions={
           <button
             type="button"
+            className="primary-button"
             onClick={() => setIsAddPersonOpen(true)}
           >
             Add person
@@ -143,6 +157,7 @@ export function MembersPage() {
           <>
             <button
               type="button"
+              className="secondary-button"
               onClick={() => setIsAddPersonOpen(false)}
             >
               Cancel
@@ -150,6 +165,7 @@ export function MembersPage() {
 
             <button
               type="submit"
+              className="primary-button"
               form={ADD_PERSON_FORM_ID}
               disabled={!addPersonFormState.canSubmit}
             >
@@ -161,6 +177,7 @@ export function MembersPage() {
         }
       >
         <PersonForm
+          formId={ADD_PERSON_FORM_ID}
           open={isAddPersonOpen}
           mode="create"
           person={null}
@@ -169,22 +186,43 @@ export function MembersPage() {
         />
       </SlideOver>
 
-      {selectedPerson && (
-        <section className="panel members-status">
-          <p className="eyebrow">Selected member</p>
-          <h3>
-            {selectedPerson.first_name} {selectedPerson.last_name}
-          </h3>
+      <SlideOver
+        open={Boolean(selectedPerson)}
+        title="Edit Person"
+        width="md"
+        onClose={() => setSelectedPerson(null)}
+        footer={
+          <>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSelectedPerson(null)}
+            >
+              Cancel
+            </button>
 
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setSelectedPerson(null)}
-          >
-            Clear selection
-          </button>
-        </section>
-      )}
+            <button
+              type="submit"
+              className="primary-button"
+              form={EDIT_PERSON_FORM_ID}
+              disabled={!editPersonFormState.canSubmit}
+            >
+              {editPersonFormState.submitting
+                ? 'Saving...'
+                : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        <PersonForm
+          formId={EDIT_PERSON_FORM_ID}
+          open={Boolean(selectedPerson)}
+          mode="edit"
+          person={selectedPerson}
+          onSaved={handlePersonUpdated}
+          onFormStateChange={setEditPersonFormState}
+        />
+      </SlideOver>
 
       {loading && (
         <section className="panel members-status">
@@ -206,15 +244,6 @@ export function MembersPage() {
           <h3>No members are available</h3>
           <p>
             Confirm that the signed-in account has access to an ownership unit.
-          </p>
-        </section>
-      )}
-
-      {selectedPerson && (
-        <section className="panel members-status">
-          <p>
-            Selected for editing: {selectedPerson.first_name}{' '}
-            {selectedPerson.last_name}
           </p>
         </section>
       )}

@@ -1,0 +1,17 @@
+# Default owner for all repository changes
+* @belchertechnologiesllc
+
+# Application code
+/src/ @belchertechnologiesllc
+
+# Database migrations and Supabase configuration
+/supabase/ @belchertechnologiesllc
+
+# Repository automation and contribution standards
+/.github/ @belchertechnologiesllc
+
+# Architecture, roadmap, and project documentation
+/docs/ @belchertechnologiesllc
+
+# Root-level deployment configuration
+/netlify.toml @belchertechnologiesllc

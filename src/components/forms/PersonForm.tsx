@@ -7,6 +7,7 @@
 import {
   createPerson,
   type CreatePersonInput,
+  type PersonRecord,
 } from '../../services/peopleService';
 import {
   getActiveOwnershipUnits,
@@ -17,6 +18,8 @@ export const ADD_PERSON_FORM_ID = 'add-person-form';
 
 type PersonFormProps = {
   open: boolean;
+  mode: 'create' | 'edit';
+  person?: PersonRecord | null;
   onSaved: (personName: string) => Promise<void> | void;
   onFormStateChange: (state: {
     canSubmit: boolean;
@@ -48,6 +51,30 @@ const initialFormState: PersonFormState = {
   isActive: true,
 };
 
+const getInitialFormState = (
+  mode: 'create' | 'edit',
+  person?: PersonRecord | null,
+): PersonFormState => {
+  if (mode === 'edit' && person) {
+    return {
+      firstName: person.first_name,
+      lastName: person.last_name,
+      preferredName: person.preferred_name ?? '',
+      ownershipUnitId: person.ownership_unit_id,
+      relationshipToPrimary:
+        person.relationship_to_primary ?? '',
+      personRole: person.person_role,
+      participatesInSharedPool:
+        person.participates_in_shared_pool,
+      participatesInGolfPool:
+        person.participates_in_golf_pool,
+      isActive: person.is_active,
+    };
+  }
+
+  return initialFormState;
+};
+
 const optionalText = (value: string) => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -55,10 +82,14 @@ const optionalText = (value: string) => {
 
 export function PersonForm({
   open,
+  mode,
+  person,
   onSaved,
   onFormStateChange,
 }: PersonFormProps) {
-  const [form, setForm] = useState<PersonFormState>(initialFormState);
+  const [form, setForm] = useState<PersonFormState>(() =>
+    getInitialFormState(mode, person),
+  );
   const [ownershipUnits, setOwnershipUnits] = useState<
     OwnershipUnitOption[]
   >([]);
@@ -130,11 +161,11 @@ export function PersonForm({
   }, [open]);
 
   useEffect(() => {
-    if (!open) {
-      setForm(initialFormState);
+    if (open) {
+      setForm(getInitialFormState(mode, person));
       setSubmitError(null);
     }
-  }, [open]);
+  }, [open, mode, person]);
 
   function updateField<K extends keyof PersonFormState>(
     field: K,

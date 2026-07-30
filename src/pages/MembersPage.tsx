@@ -162,6 +162,8 @@ export function MembersPage() {
       >
         <PersonForm
           open={isAddPersonOpen}
+          mode="create"
+          person={null}
           onSaved={handlePersonSaved}
           onFormStateChange={setAddPersonFormState}
         />

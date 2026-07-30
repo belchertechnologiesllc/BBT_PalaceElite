@@ -8,8 +8,8 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { SlideOver } from '../components/forms/SlideOver';
 import {
   ADD_PERSON_FORM_ID,
-  AddPersonForm,
-} from '../components/forms/AddPersonForm';
+  PersonForm,
+} from '../components/forms/PersonForm';
 
 type OwnershipUnitGroup = {
   unit: OwnershipUnitRecord;
@@ -158,7 +158,7 @@ export function MembersPage() {
           </>
         }
       >
-        <AddPersonForm
+        <PersonForm
           open={isAddPersonOpen}
           onSaved={handlePersonSaved}
           onFormStateChange={setAddPersonFormState}

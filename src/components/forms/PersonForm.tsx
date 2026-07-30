@@ -15,7 +15,7 @@ import {
 
 export const ADD_PERSON_FORM_ID = 'add-person-form';
 
-type AddPersonFormProps = {
+type PersonFormProps = {
   open: boolean;
   onSaved: (personName: string) => Promise<void> | void;
   onFormStateChange: (state: {
@@ -24,7 +24,7 @@ type AddPersonFormProps = {
   }) => void;
 };
 
-type AddPersonFormState = {
+type PersonFormState = {
   firstName: string;
   lastName: string;
   preferredName: string;
@@ -36,7 +36,7 @@ type AddPersonFormState = {
   isActive: boolean;
 };
 
-const initialFormState: AddPersonFormState = {
+const initialFormState: PersonFormState = {
   firstName: '',
   lastName: '',
   preferredName: '',
@@ -53,12 +53,12 @@ const optionalText = (value: string) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-export function AddPersonForm({
+export function PersonForm({
   open,
   onSaved,
   onFormStateChange,
-}: AddPersonFormProps) {
-  const [form, setForm] = useState<AddPersonFormState>(initialFormState);
+}: PersonFormProps) {
+  const [form, setForm] = useState<PersonFormState>(initialFormState);
   const [ownershipUnits, setOwnershipUnits] = useState<
     OwnershipUnitOption[]
   >([]);
@@ -136,9 +136,9 @@ export function AddPersonForm({
     }
   }, [open]);
 
-  function updateField<K extends keyof AddPersonFormState>(
+  function updateField<K extends keyof PersonFormState>(
     field: K,
-    value: AddPersonFormState[K],
+    value: PersonFormState[K],
   ) {
     setForm((current) => ({
       ...current,

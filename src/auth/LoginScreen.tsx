@@ -54,7 +54,7 @@ export function LoginScreen() {
             required
           />
 
-          <button className="primary-button" type="submit" disabled={working}>
+          <button className="primary-button button-block" type="submit" disabled={working}>
             {working ? 'Signing in…' : 'Sign in'}
           </button>
         </form>

@@ -5,11 +5,8 @@
   type FormEvent,
 } from 'react';
 import {
-  createPerson,
-  updatePerson,
   type CreatePersonInput,
   type PersonRecord,
-  type UpdatePersonInput,
 } from '../../services/peopleService';
 import {
   getActiveOwnershipUnits,
@@ -21,7 +18,7 @@ type PersonFormProps = {
   open: boolean;
   mode: 'create' | 'edit';
   person?: PersonRecord | null;
-  onSaved: (personName: string) => Promise<void> | void;
+  onSubmit: (formData: CreatePersonInput) => Promise<void> | void;
   onFormStateChange: (state: {
     canSubmit: boolean;
     submitting: boolean;
@@ -86,7 +83,7 @@ export function PersonForm({
   open,
   mode,
   person,
-  onSaved,
+  onSubmit,
   onFormStateChange,
 }: PersonFormProps) {
   const [form, setForm] = useState<PersonFormState>(() =>
@@ -206,7 +203,7 @@ export function PersonForm({
     setSubmitError(null);
 
     try {
-      const commonInput = {
+      const formData: CreatePersonInput = {
         firstName: form.firstName,
         lastName: form.lastName,
         preferredName: optionalText(form.preferredName),
@@ -224,25 +221,7 @@ export function PersonForm({
         isActive: form.isActive,
       };
 
-      if (mode === 'edit' && person) {
-        const input: UpdatePersonInput = {
-          id: person.id,
-          ...commonInput,
-        };
-
-        await updatePerson(input);
-      } else {
-        const input: CreatePersonInput = commonInput;
-
-        await createPerson(input);
-      }
-
-      const savedPersonName = [
-        form.firstName.trim(),
-        form.lastName.trim(),
-      ].join(' ');
-
-      await onSaved(savedPersonName);
+      await onSubmit(formData);
     } catch (error) {
       setSubmitError(
         error instanceof Error

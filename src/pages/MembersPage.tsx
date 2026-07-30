@@ -1,6 +1,9 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  createPerson,
   getActivePeople,
+  updatePerson,
+  type CreatePersonInput,
   type OwnershipUnitRecord,
   type PersonRecord,
 } from '../services/peopleService';
@@ -72,8 +75,15 @@ export function MembersPage() {
   }
 }, []);
 
-  const handlePersonSaved = useCallback(
-    async (personName: string) => {
+  const handleCreatePerson = useCallback(
+    async (formData: CreatePersonInput) => {
+      await createPerson(formData);
+
+      const personName = [
+        formData.firstName.trim(),
+        formData.lastName.trim(),
+      ].join(' ');
+
       setIsAddPersonOpen(false);
       setSuccessToast(`${personName} added successfully.`);
       await loadPeople();
@@ -81,13 +91,24 @@ export function MembersPage() {
     [loadPeople],
   );
 
-  const handlePersonUpdated = useCallback(
-    async (personName: string) => {
+  const handleUpdatePerson = useCallback(
+    async (formData: CreatePersonInput) => {
+      if (!selectedPerson) {
+        return;
+      }
+
+      await updatePerson({ id: selectedPerson.id, ...formData });
+
+      const personName = [
+        formData.firstName.trim(),
+        formData.lastName.trim(),
+      ].join(' ');
+
       setSelectedPerson(null);
       setSuccessToast(`${personName} updated successfully.`);
       await loadPeople();
     },
-    [loadPeople],
+    [loadPeople, selectedPerson],
   );
 
   useEffect(() => {
@@ -181,7 +202,7 @@ export function MembersPage() {
           open={isAddPersonOpen}
           mode="create"
           person={null}
-          onSaved={handlePersonSaved}
+          onSubmit={handleCreatePerson}
           onFormStateChange={setAddPersonFormState}
         />
       </SlideOver>
@@ -219,7 +240,7 @@ export function MembersPage() {
           open={Boolean(selectedPerson)}
           mode="edit"
           person={selectedPerson}
-          onSaved={handlePersonUpdated}
+          onSubmit={handleUpdatePerson}
           onFormStateChange={setEditPersonFormState}
         />
       </SlideOver>

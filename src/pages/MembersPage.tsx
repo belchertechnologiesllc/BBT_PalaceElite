@@ -42,6 +42,8 @@ export function MembersPage() {
     canSubmit: false,
     submitting: false,
   });
+  const [selectedPerson, setSelectedPerson] =
+    useState<PersonRecord | null>(null);
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -189,6 +191,15 @@ export function MembersPage() {
         </section>
       )}
 
+      {selectedPerson && (
+        <section className="panel members-status">
+          <p>
+            Selected for editing: {selectedPerson.first_name}{' '}
+            {selectedPerson.last_name}
+          </p>
+        </section>
+      )}
+
       {!loading &&
         !errorMessage &&
         ownershipUnits.map(({ unit, people: unitPeople }) => (
@@ -270,6 +281,13 @@ export function MembersPage() {
                         active={person.participates_in_golf_pool}
                       />
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPerson(person)}
+                    >
+                      Edit
+                    </button>
                   </article>
                 );
               })}

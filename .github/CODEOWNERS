@@ -1,0 +1,5 @@
+# Default owners for everything in the repo, unless a later match takes precedence.
+* @belchertechnologiesllc
+
+# Database schema and migrations require extra scrutiny.
+/supabase/ @belchertechnologiesllc

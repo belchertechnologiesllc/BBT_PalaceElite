@@ -68,6 +68,20 @@ export type CreatePersonInput = {
   isActive: boolean;
 };
 
+export type UpdatePersonInput = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  preferredName: string | null;
+  relationshipToPrimary: string | null;
+  personRole: string;
+  ownershipUnitId: string;
+  membershipId: string;
+  participatesInSharedPool: boolean;
+  participatesInGolfPool: boolean;
+  isActive: boolean;
+};
+
 export async function createPerson(
   input: CreatePersonInput,
 ): Promise<void> {
@@ -89,6 +103,34 @@ export async function createPerson(
       participates_in_golf_pool: input.participatesInGolfPool,
       is_active: input.isActive,
     });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function updatePerson(
+  input: UpdatePersonInput,
+): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const { error } = await supabase
+    .from('people')
+    .update({
+      first_name: input.firstName.trim(),
+      last_name: input.lastName.trim(),
+      preferred_name: input.preferredName,
+      relationship_to_primary: input.relationshipToPrimary,
+      person_role: input.personRole,
+      membership_id: input.membershipId,
+      ownership_unit_id: input.ownershipUnitId,
+      participates_in_shared_pool: input.participatesInSharedPool,
+      participates_in_golf_pool: input.participatesInGolfPool,
+      is_active: input.isActive,
+    })
+    .eq('id', input.id);
 
   if (error) {
     throw new Error(error.message);

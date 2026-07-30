@@ -16,6 +16,7 @@ export type PersonRecord = {
   profile_id: string | null;
   participates_in_shared_pool: boolean;
   participates_in_golf_pool: boolean;
+  is_active: boolean;
   ownership_unit_id: string;
   ownership_unit: OwnershipUnitRecord;
 };
@@ -37,6 +38,7 @@ export async function getActivePeople(): Promise<PersonRecord[]> {
       profile_id,
       participates_in_shared_pool,
       participates_in_golf_pool,
+      is_active,
       ownership_unit_id,
       ownership_unit:ownership_units!people_ownership_unit_id_fkey (
         id,

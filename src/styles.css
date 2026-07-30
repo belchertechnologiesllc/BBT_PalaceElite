@@ -242,6 +242,11 @@ h4 {
   cursor: wait;
 }
 
+.button-block {
+  width: 100%;
+  margin-top: 1rem;
+}
+
 .error-message,
 .global-error {
   color: #a12d2d;

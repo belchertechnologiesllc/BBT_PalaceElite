@@ -167,6 +167,23 @@ export function MembersPage() {
         />
       </SlideOver>
 
+      {selectedPerson && (
+        <section className="panel members-status">
+          <p className="eyebrow">Selected member</p>
+          <h3>
+            {selectedPerson.first_name} {selectedPerson.last_name}
+          </h3>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setSelectedPerson(null)}
+          >
+            Clear selection
+          </button>
+        </section>
+      )}
+
       {loading && (
         <section className="panel members-status">
           <p>Loading members...</p>
@@ -284,9 +301,10 @@ export function MembersPage() {
 
                     <button
                       type="button"
+                      className="secondary-button button-block"
                       onClick={() => setSelectedPerson(person)}
                     >
-                      Edit
+                      Edit Member
                     </button>
                   </article>
                 );

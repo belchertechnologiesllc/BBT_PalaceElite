@@ -1,5 +1,17 @@
-# Default owners for everything in the repo, unless a later match takes precedence.
+# Default owner for all repository changes
 * @belchertechnologiesllc
 
-# Database schema and migrations require extra scrutiny.
+# Application code
+/src/ @belchertechnologiesllc
+
+# Database migrations and Supabase configuration
 /supabase/ @belchertechnologiesllc
+
+# Repository automation and contribution standards
+/.github/ @belchertechnologiesllc
+
+# Architecture, roadmap, and project documentation
+/docs/ @belchertechnologiesllc
+
+# Root-level deployment configuration
+/netlify.toml @belchertechnologiesllc

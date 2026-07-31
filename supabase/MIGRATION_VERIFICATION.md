@@ -6,7 +6,10 @@ the schema landed as intended. None of these statements modify data — they
 are all `select` queries against catalog views or the seeded rows.
 
 Sections 1-11 cover the initial schema migration. Section 12 covers
-`20260730190000_add_ownership_units_update_policy.sql`.
+`20260730190000_add_ownership_units_update_policy.sql`. Sections 13-14
+cover `20260731120000_add_people_display_order.sql` and
+`20260731130000_add_reorder_people_function.sql`. Section 15 covers
+`20260731160000_revoke_default_truncate_grants.sql`.
 
 ## 1. Seed data landed correctly
 
@@ -302,3 +305,190 @@ select name, ownership_percentage from public.ownership_units order by name;
 -- Expect unchanged values: Belcher = 33.3333, "Belcher Sr." = 33.3333,
 -- Tatro = 33.3334 (see section 1) — this migration contains no DML.
 ```
+
+## 13. `people.display_order` landed correctly
+
+Checks for `supabase/migrations/20260731120000_add_people_display_order.sql`.
+
+```sql
+select column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'people' and column_name = 'display_order';
+```
+
+Expect one row: `integer`, `is_nullable = 'NO'`, `column_default = '0'`.
+
+```sql
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.people'::regclass and conname = 'people_display_order_check';
+```
+
+Expect `CHECK ((display_order >= 0))`.
+
+```sql
+select display_order, count(*) from public.people group by display_order;
+```
+
+Expect every existing row still at `display_order = 0` (the migration is additive-only, no backfill logic beyond the column default).
+
+## 14. `reorder_people_within_ownership_unit` is atomic, admin-gated, and audited
+
+Checks for `supabase/migrations/20260731130000_add_reorder_people_function.sql`.
+**Not executed** — this repository has no live Supabase connection available in
+this environment; these are the checks to run once one is.
+
+### 14a. Least privilege
+
+```sql
+select routine_name, grantee, privilege_type
+from information_schema.routine_privileges
+where routine_schema = 'public' and routine_name = 'reorder_people_within_ownership_unit'
+order by grantee;
+```
+
+Expect `authenticated` with `EXECUTE`, no `PUBLIC` row.
+
+```sql
+select proname, prosecdef, proconfig
+from pg_proc
+where proname = 'reorder_people_within_ownership_unit';
+```
+
+Expect `prosecdef = true` and `proconfig` containing `search_path=pg_catalog, public`.
+
+### 14b. Authorization is enforced
+
+As a real authenticated user who is **not** an admin of the target membership:
+
+```sql
+select public.reorder_people_within_ownership_unit(
+  '<some ownership_unit_id>'::uuid,
+  array['<person_id_1>', '<person_id_2>']::uuid[]
+);
+-- Expect: ERROR: Membership administrator access is required
+```
+
+### 14c. Validation rejects malformed input, one case at a time
+
+As a real admin, each of these should raise before touching any row:
+
+```sql
+-- Missing a currently-active person from the unit
+select public.reorder_people_within_ownership_unit('<unit_id>'::uuid, array['<only_some_of_the_ids>']::uuid[]);
+
+-- Includes an id from a different ownership unit
+select public.reorder_people_within_ownership_unit('<unit_id>'::uuid, array['<id_from_another_unit>']::uuid[]);
+
+-- Includes an inactive (is_active = false) person's id
+select public.reorder_people_within_ownership_unit('<unit_id>'::uuid, array['<inactive_person_id>']::uuid[]);
+
+-- Duplicate id in the array
+select public.reorder_people_within_ownership_unit('<unit_id>'::uuid, array['<id>', '<id>']::uuid[]);
+```
+
+Expect each to raise `ERROR: p_person_ids must contain exactly the active people ...`
+or `ERROR: p_person_ids contains duplicate person ids`, and expect **zero rows
+changed** — confirm with `select id, display_order from public.people where ownership_unit_id = '<unit_id>'`
+before and after each failed call.
+
+### 14d. A valid reorder is atomic and persists
+
+```sql
+select public.reorder_people_within_ownership_unit(
+  '<unit_id>'::uuid,
+  array['<id_now_first>', '<id_now_second>', '<id_now_third>']::uuid[]
+);
+
+select id, display_order from public.people
+where ownership_unit_id = '<unit_id>' and is_active = true
+order by display_order;
+```
+
+Expect `display_order` to be `0, 1, 2` in the array's order.
+
+### 14e. The reorder is captured in `audit_log`
+
+```sql
+select entity_id, action, previous_data ->> 'display_order' as old_order, new_data ->> 'display_order' as new_order
+from public.audit_log
+where entity_type = 'people'
+order by created_at desc
+limit 5;
+```
+
+Expect one row per reordered person, `action = 'UPDATE'`, and `old_order`/
+`new_order` reflecting the change — confirms `people_audit_trg` captured
+`display_order` automatically with no trigger changes, as expected since
+`log_audit_event()` logs `to_jsonb(old)`/`to_jsonb(new)` (the whole row).
+
+## 15. `anon`/`authenticated` no longer have TRUNCATE on any table
+
+Checks for `supabase/migrations/20260731160000_revoke_default_truncate_grants.sql`.
+Unrelated to the reorder feature — found while testing it locally, shipped
+alongside it rather than separately.
+
+This closes a gap that predates every migration in this repository: this
+Supabase project has a platform-set `ALTER DEFAULT PRIVILEGES FOR ROLE
+postgres IN SCHEMA public` entry that grants `TRUNCATE`, `REFERENCES`, and
+`TRIGGER` to `anon`/`authenticated`/`service_role` on every table created
+by role `postgres` — which is every table in this schema. `TRUNCATE` is
+not filtered by row level security, so this silently let an unauthenticated
+caller wipe any table, including `audit_log`, in one statement.
+
+### 15a. No table grants TRUNCATE/REFERENCES/TRIGGER to anon/authenticated
+
+```sql
+select table_name, grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee in ('anon', 'authenticated')
+  and privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER')
+order by table_name, grantee, privilege_type;
+```
+
+Expect zero rows.
+
+```sql
+select has_table_privilege('anon', 'public.audit_log', 'TRUNCATE') as anon_truncate_audit_log;
+```
+
+Expect `false` — this specific check is the one that failed before this
+migration.
+
+### 15b. The default is fixed for future tables too
+
+```sql
+select defaclrole::regrole, defaclacl
+from pg_default_acl
+where defaclnamespace = 'public'::regnamespace and defaclobjtype = 'r';
+```
+
+Expect the `postgres`-role entry's ACL to no longer include `D` (truncate),
+`x` (references), or `t` (trigger) for `anon`/`authenticated`.
+
+### 15c. Existing DML grants are untouched
+
+```sql
+select table_name, grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee in ('anon', 'authenticated')
+  and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+order by table_name, grantee, privilege_type;
+```
+
+Expect this list to be identical before and after the migration — compare
+against a snapshot taken before applying it. In particular `authenticated`
+should still have exactly `SELECT`+`UPDATE` on `ownership_units`,
+`SELECT`+`INSERT`+`UPDATE` on `people`, `SELECT` on `memberships` and
+`audit_log`, and `anon` should still have none of these on any table.
+
+---
+
+**Note on local validation performed for this fix:** applied and verified
+against a local Docker Postgres instance (`supabase start`), not the
+connected/hosted project — `has_table_privilege()` confirmed `false` for
+`anon`/`authenticated` TRUNCATE across every table in `public` after the
+migration, and a snapshot of SELECT/INSERT/UPDATE grants taken before and
+after confirmed no legitimate privilege was affected.

@@ -720,6 +720,23 @@ dd {
   margin-top: 1.25rem;
 }
 
+.member-drag-handle {
+  cursor: grab;
+  color: var(--muted-text, #667085);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.member-order-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.member-order-controls button {
+  flex: 1;
+}
+
 .eligibility-badge {
   display: inline-flex;
   align-items: center;

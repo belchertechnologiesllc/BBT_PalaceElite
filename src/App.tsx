@@ -3,6 +3,7 @@ import { LoginScreen } from './auth/LoginScreen';
 import { useAuth } from './auth/AuthProvider';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
+import { BenefitsPage } from './pages/BenefitsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { MembersPage } from './pages/MembersPage';
 import { OwnershipPage } from './pages/OwnershipPage';
@@ -60,6 +61,9 @@ export default function App() {
 
       case 'Ownership':
         return <OwnershipPage />;
+
+      case 'Benefits':
+        return <BenefitsPage />;
 
       case 'Profile':
         return <ProfilePage />;

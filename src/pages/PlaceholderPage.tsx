@@ -9,8 +9,7 @@ const descriptions: Record<NavigationItem, string> = {
   Members:
     'Manage ownership units, household members, and participation eligibility.',
   Ownership: '',
-  Benefits:
-    'Review shared and golf benefit pools, balances, and expiration dates.',
+  Benefits: '',
   Transactions:
     'Record benefit activity while preserving the complete audit history.',
   Reservations:

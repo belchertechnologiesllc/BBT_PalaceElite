@@ -1008,3 +1008,70 @@ dd {
     max-width: none;
   }
 }
+/* ==========================================================================
+   Benefits administration (ISSUE-10 / STEP-5)
+   ========================================================================== */
+
+.form-field textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 0.5rem;
+  background: var(--surface-color, #ffffff);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.form-field textarea:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.form-field textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.benefit-grant-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.benefit-grant-edit {
+  display: grid;
+  gap: 2rem;
+}
+
+.benefit-grant-edit .benefit-grant-form {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color, #cbd5e1);
+}
+
+.benefit-grant-edit .benefit-grant-form:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.locked-state {
+  border-color: rgba(180, 130, 8, 0.4);
+  background: rgba(255, 242, 194, 0.35);
+}
+
+.locked-tag {
+  display: inline-block;
+  border-radius: 999px;
+  font-size: .74rem;
+  font-weight: 800;
+  padding: 7px 11px;
+  white-space: nowrap;
+  background: #fff2c2;
+  color: #6c4f08;
+}
+
+@media (max-width: 640px) {
+  .benefit-grant-edit {
+    gap: 1.5rem;
+  }
+}

@@ -17,6 +17,7 @@ export type PersonRecord = {
   participates_in_shared_pool: boolean;
   participates_in_golf_pool: boolean;
   is_active: boolean;
+  display_order: number;
   ownership_unit_id: string;
   ownership_unit: OwnershipUnitRecord;
 };
@@ -39,6 +40,7 @@ export async function getActivePeople(): Promise<PersonRecord[]> {
       participates_in_shared_pool,
       participates_in_golf_pool,
       is_active,
+      display_order,
       ownership_unit_id,
       ownership_unit:ownership_units!people_ownership_unit_id_fkey (
         id,
@@ -47,6 +49,8 @@ export async function getActivePeople(): Promise<PersonRecord[]> {
       )
     `)
     .is('archived_at', null)
+    .eq('is_active', true)
+    .order('display_order')
     .order('last_name')
     .order('first_name');
 
@@ -133,6 +137,31 @@ export async function updatePerson(
       is_active: input.isActive,
     })
     .eq('id', input.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+// personIds must be the complete, ordered list of active people currently
+// assigned to ownershipUnitId (top to bottom); the database function
+// rejects missing, duplicated, inactive, archived, or cross-unit ids as a
+// single atomic check rather than trusting a partial update sequence.
+export async function reorderPeopleWithinOwnershipUnit(
+  ownershipUnitId: string,
+  personIds: string[],
+): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const { error } = await supabase.rpc(
+    'reorder_people_within_ownership_unit',
+    {
+      p_ownership_unit_id: ownershipUnitId,
+      p_person_ids: personIds,
+    },
+  );
 
   if (error) {
     throw new Error(error.message);

@@ -117,6 +117,7 @@ export async function getOwnershipUnits(): Promise<OwnershipUnitRecord[]> {
     .is('archived_at', null)
     .eq('assigned_active_members.is_active', true)
     .order('name')
+    .order('display_order', { referencedTable: 'assigned_active_members' })
     .order('last_name', { referencedTable: 'assigned_active_members' })
     .order('first_name', { referencedTable: 'assigned_active_members' });
 

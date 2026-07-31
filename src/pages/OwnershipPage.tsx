@@ -216,37 +216,43 @@ export function OwnershipPage() {
               </span>
             </div>
 
-            <dl className="member-details">
-              <div>
-                <dt>Ownership percentage</dt>
-                <dd>{unit.ownership_percentage}%</dd>
+            <div className="ownership-unit-body">
+              <dl className="member-details">
+                <div>
+                  <dt>Ownership percentage</dt>
+                  <dd>{unit.ownership_percentage}%</dd>
+                </div>
+              </dl>
+
+              <div className="assigned-members">
+                <p className="eyebrow">Assigned active members</p>
+
+                {unit.assigned_active_members.length === 0 ? (
+                  <p>No active members are currently assigned.</p>
+                ) : (
+                  <ul className="assigned-members-list">
+                    {unit.assigned_active_members.map((member) => (
+                      <li key={member.id}>
+                        <span>{memberDisplayName(member)}</span>
+                        <span className="member-role-tag">
+                          {formatRole(member.person_role)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            </dl>
-
-            <div>
-              <p className="eyebrow">Assigned active members</p>
-
-              {unit.assigned_active_members.length === 0 ? (
-                <p>No active members are currently assigned.</p>
-              ) : (
-                <ul>
-                  {unit.assigned_active_members.map((member) => (
-                    <li key={member.id}>
-                      {memberDisplayName(member)} (
-                      {formatRole(member.person_role)})
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
-            <button
-              type="button"
-              className="secondary-button button-block"
-              onClick={() => setSelectedOwnershipUnit(unit)}
-            >
-              Edit Ownership Unit
-            </button>
+            <div className="ownership-unit-footer">
+              <button
+                type="button"
+                className="secondary-button button-block"
+                onClick={() => setSelectedOwnershipUnit(unit)}
+              >
+                Edit Ownership Unit
+              </button>
+            </div>
           </section>
         ))}
     </>

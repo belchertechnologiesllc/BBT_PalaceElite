@@ -5,6 +5,9 @@ applying `supabase/migrations/20260728033000_initial_schema.sql`, to confirm
 the schema landed as intended. None of these statements modify data — they
 are all `select` queries against catalog views or the seeded rows.
 
+Sections 1-11 cover the initial schema migration. Section 12 covers
+`20260730190000_add_ownership_units_update_policy.sql`.
+
 ## 1. Seed data landed correctly
 
 ```sql
@@ -193,3 +196,109 @@ insert/void/approve flows and RLS isolation between two mock Auth users) were
 exercised against a disposable local PostgreSQL 16 instance with a minimal
 mock `auth` schema, *not* against the live Supabase project. That local
 database was dropped afterward and is not part of this repository.
+
+## 12. `ownership_units` UPDATE policy landed correctly
+
+Checks for
+`supabase/migrations/20260730190000_add_ownership_units_update_policy.sql`,
+which adds the missing UPDATE policy/grant on `public.ownership_units`
+without touching any other privilege, column, or existing policy.
+
+### 12a. The new policy exists, is scoped to UPDATE, and reuses the
+admin-check helper
+
+```sql
+select
+  polname,
+  polcmd,
+  pg_get_expr(polqual, polrelid) as using_expression,
+  pg_get_expr(polwithcheck, polrelid) as with_check_expression
+from pg_policy
+where polrelid = 'public.ownership_units'::regclass;
+```
+
+Expect two rows:
+- `membership users can read units` — `polcmd = 'r'` (SELECT), unchanged
+  from the initial schema migration.
+- `membership admins can update units` — `polcmd = 'w'` (UPDATE), with both
+  `using_expression` and `with_check_expression` equal to
+  `user_is_membership_admin(membership_id)`.
+
+Both a `using` and `with check` clause referencing the *new* row's
+`membership_id` are required — without `with_check`, an administrator could
+update a row's `membership_id` to move it into a membership they do not
+administer, since only the pre-update row would be checked.
+
+### 12b. `authenticated` has UPDATE; `anon` does not
+
+```sql
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'ownership_units'
+order by grantee, privilege_type;
+```
+
+Expect `authenticated` to have `SELECT` and `UPDATE` only. Expect no row for
+`anon`, and no `INSERT` or `DELETE` for any grantee — this migration adds
+only `grant update ... to authenticated` on top of the existing
+`grant select ... to authenticated` from the initial schema migration.
+
+### 12c. DELETE remains blocked, and an unauthorized UPDATE is rejected
+
+These use `begin ... rollback` so nothing is actually changed:
+
+```sql
+begin;
+  delete from public.ownership_units
+  where id = (select id from public.ownership_units limit 1);
+rollback;
+-- Expect: ERROR: Hard deletes are not permitted on table "ownership_units" ...
+```
+
+Run as an authenticated user who is **not** an admin of the target
+membership (or as `anon`, where RLS alone already blocks the statement):
+
+```sql
+begin;
+  update public.ownership_units
+  set members_description = 'RLS smoke test'
+  where id = (select id from public.ownership_units limit 1);
+rollback;
+-- Expect 0 rows updated (RLS silently filters the target row rather than
+-- raising, per standard Postgres RLS UPDATE behavior) when the caller is
+-- not public.user_is_membership_admin() for that unit's membership.
+```
+
+### 12d. Existing audit and hard-delete-blocking triggers are untouched
+
+```sql
+select tgname, tgrelid::regclass as table_name, tgenabled
+from pg_trigger
+where tgrelid = 'public.ownership_units'::regclass
+  and tgname in ('ownership_units_audit_trg', 'ownership_units_block_delete_trg');
+```
+
+Expect both rows present and `tgenabled = 'O'` (enabled), unchanged from the
+initial schema migration — this migration does not create, drop, or replace
+any trigger.
+
+### 12e. No column, percentage, or unrelated-policy drift
+
+```sql
+select column_name, data_type, is_nullable
+from information_schema.columns
+where table_schema = 'public' and table_name = 'ownership_units'
+order by ordinal_position;
+```
+
+Expect the same eight columns as before this migration
+(`id`, `membership_id`, `name`, `members_description`,
+`ownership_percentage`, `participates_in_golf_pool`, `archived_at`,
+`created_at`) — no additions (e.g. no shared-pool or archive-reason column),
+no drops, no type changes.
+
+```sql
+select name, ownership_percentage from public.ownership_units order by name;
+-- Expect unchanged values: Belcher = 33.3333, "Belcher Sr." = 33.3333,
+-- Tatro = 33.3334 (see section 1) — this migration contains no DML.
+```

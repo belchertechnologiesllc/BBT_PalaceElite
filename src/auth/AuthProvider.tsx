@@ -7,7 +7,7 @@ type AuthContextValue = {
   loading: boolean;
   session: Session | null;
   user: User | null;
-  signInWithGitHub: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -24,44 +24,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     void supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error('Unable to restore Supabase session', error);
+      if (error) {
+        console.error('Unable to restore Supabase session', error);
+      }
+
       setSession(data.session ?? null);
       setLoading(false);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setLoading(false);
     });
 
-    return () => subscription.subscription.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => ({
-    configured: isSupabaseConfigured,
-    loading,
-    session,
-    user: session?.user ?? null,
-    signInWithGitHub: async () => {
-      if (!supabase) throw new Error('Supabase environment variables are not configured.');
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: { redirectTo: window.location.origin },
-      });
-      if (error) throw error;
-    },
-    signOut: async () => {
-      if (!supabase) return;
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    },
-  }), [loading, session]);
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      configured: isSupabaseConfigured,
+      loading,
+      session,
+      user: session?.user ?? null,
+      signIn: async (email: string, password: string) => {
+        if (!supabase) {
+          throw new Error('Supabase environment variables are not configured.');
+        }
+
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          throw error;
+        }
+      },
+      signOut: async () => {
+        if (!supabase) {
+          return;
+        }
+
+        const { error } = await supabase.auth.signOut();
+
+        if (error) {
+          throw error;
+        }
+      },
+    }),
+    [loading, session],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   const value = useContext(AuthContext);
-  if (!value) throw new Error('useAuth must be used inside AuthProvider.');
+
+  if (!value) {
+    throw new Error('useAuth must be used inside AuthProvider.');
+  }
+
   return value;
 }

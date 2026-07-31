@@ -9,7 +9,11 @@ Sections 1-11 cover the initial schema migration. Section 12 covers
 `20260730190000_add_ownership_units_update_policy.sql`. Sections 13-14
 cover `20260731120000_add_people_display_order.sql` and
 `20260731130000_add_reorder_people_function.sql`. Section 15 covers
-`20260731160000_revoke_default_truncate_grants.sql`.
+`20260731160000_revoke_default_truncate_grants.sql`. Sections 16-18 cover
+`20260731170000_add_ownership_units_shared_pool.sql`,
+`20260731180000_enforce_symmetric_pool_eligibility.sql`, and
+`20260731190000_protect_benefit_grant_accounting_fields.sql`
+(ISSUE-10 / STEP-3).
 
 ## 1. Seed data landed correctly
 
@@ -492,3 +496,127 @@ connected/hosted project — `has_table_privilege()` confirmed `false` for
 `anon`/`authenticated` TRUNCATE across every table in `public` after the
 migration, and a snapshot of SELECT/INSERT/UPDATE grants taken before and
 after confirmed no legitimate privilege was affected.
+
+## 16. `ownership_units.participates_in_shared_pool` landed correctly
+
+Checks for `supabase/migrations/20260731170000_add_ownership_units_shared_pool.sql`.
+
+```sql
+select column_name, data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'ownership_units'
+  and column_name = 'participates_in_shared_pool';
+```
+
+Expect one row: `boolean`, `is_nullable = 'NO'`, `column_default = 'true'`.
+
+```sql
+select name, participates_in_shared_pool, participates_in_golf_pool
+from public.ownership_units
+order by name;
+```
+
+Expect: Belcher = (true, true), "Belcher Sr." = (true, true), Tatro = (true, false).
+The Golf column must be unchanged from section 1 — this migration does not
+touch `participates_in_golf_pool`.
+
+```sql
+select col_description('public.ownership_units'::regclass, ordinal_position)
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'ownership_units'
+  and column_name = 'participates_in_shared_pool';
+```
+
+Expect a non-null explanatory comment.
+
+## 17. Symmetric Shared/Golf eligibility enforcement is wired up
+
+Checks for `supabase/migrations/20260731180000_enforce_symmetric_pool_eligibility.sql`.
+
+```sql
+select tgname, tgrelid::regclass, tgenabled
+from pg_trigger
+where tgname in ('people_pool_eligibility_trg', 'enforce_pool_eligibility_trg');
+```
+
+Expect both triggers still attached to `public.people` and
+`public.benefit_transactions` respectively, `tgenabled = 'O'` — trigger
+*attachment* is unchanged by this migration; only the underlying function
+bodies were replaced via `CREATE OR REPLACE FUNCTION`.
+
+```sql
+select proname, prosecdef
+from pg_proc
+where proname in ('enforce_people_pool_eligibility', 'enforce_pool_eligibility');
+```
+
+Expect `prosecdef = false` (`SECURITY INVOKER`) for both — unchanged from
+before this migration.
+
+Functional checks (run inside a transaction you intend to roll back, or see
+the pgTAP suite in `supabase/tests/001_business_rules.sql` for the same
+checks run automatically):
+
+- Inserting a `people` row with `participates_in_shared_pool = true` under
+  an ownership unit whose `participates_in_shared_pool = false` must raise.
+- Inserting a `people` row with `participates_in_golf_pool = true` under
+  Tatro (`participates_in_golf_pool = false`) must still raise, exactly as
+  before this migration.
+- Inserting a `benefit_transactions` row against a `shared`-pool grant for
+  an ownership unit with `participates_in_shared_pool = false` must raise.
+- The existing Golf-pool transaction behavior (Tatro rejected, Belcher
+  accepted) must be unchanged.
+
+## 18. `benefit_grants` accounting fields are locked once referenced by a transaction
+
+Checks for
+`supabase/migrations/20260731190000_protect_benefit_grant_accounting_fields.sql`.
+
+```sql
+select tgname, tgenabled
+from pg_trigger
+where tgrelid = 'public.benefit_grants'::regclass and not tgisinternal
+order by tgname;
+```
+
+Expect three rows: `benefit_grants_audit_trg`, `benefit_grants_block_delete_trg`,
+and `enforce_benefit_grant_immutability_trg`, all `tgenabled = 'O'`.
+
+```sql
+select has_function_privilege('anon', 'public.enforce_benefit_grant_immutability()', 'EXECUTE') as anon_can_exec,
+       has_function_privilege('authenticated', 'public.enforce_benefit_grant_immutability()', 'EXECUTE') as auth_can_exec;
+```
+
+Expect both `false` — this is a trigger-only function, never called
+directly by any client role, consistent with `block_hard_delete` and
+`prevent_audit_log_tampering`.
+
+Functional checks (see `supabase/tests/001_business_rules.sql` for the
+automated equivalents):
+
+- On a grant with **zero** `benefit_transactions` rows referencing it,
+  every field (`membership_id`, `pool`, `quantity_kind`, `original_quantity`,
+  `release_date`, `expiration_date`, `name`, `restrictions`, `archived_at`/
+  `archived_reason`) remains editable.
+- On a grant with **at least one** `benefit_transactions` row referencing
+  it (any status — draft, submitted, approved, or voided all count),
+  attempting to change `membership_id`, `pool`, `quantity_kind`,
+  `original_quantity`, `release_date`, or `expiration_date` must raise.
+- `created_at` must be rejected on **every** update to `benefit_grants`,
+  regardless of whether the grant has any referencing transactions.
+- `name`, `restrictions`, and `archived_at`/`archived_reason` (set
+  together) must remain editable on a referenced grant, and the resulting
+  `UPDATE` must still produce an `audit_log` row via the unchanged
+  `benefit_grants_audit_trg`.
+
+---
+
+**Note on local validation performed for sections 16-18:** applied and
+verified against the same local Docker Postgres instance used for section
+15 (`supabase_db_BBT_PalaceElite`), not the connected/hosted project. The
+full pgTAP suite in `supabase/tests/001_business_rules.sql` (36 assertions)
+was run against this local instance and passed with zero failures,
+including 20 new assertions added for this work. No migration in this
+range was applied to, or executed against, the hosted Supabase project.

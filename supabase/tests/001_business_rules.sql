@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(36);
 
 -- =============================================================================
 -- Test helper: return true when a SQL statement raises any exception.
@@ -458,6 +458,293 @@ select is(
     where id = (select value from test_ids where key = 'shared_grant')
   ),
   'Voided transactions do not reduce benefit balances'
+);
+
+-- =============================================================================
+-- Shared-pool eligibility (ISSUE-10 / STEP-3).
+--
+-- Golf-pool separation at the transaction level (Tatro rejected, Belcher
+-- accepted, using shared_grant against belcher_unit and golf_grant against
+-- belcher_unit) is already exercised above by the "Draft transaction can be
+-- created", "Tatro cannot consume a golf-pool benefit", and "Belcher can
+-- consume a golf-pool benefit" tests -- those three already demonstrate a
+-- Shared transaction accepted for a Shared-eligible unit and a Golf
+-- transaction accepted for a Golf-eligible unit / rejected for a
+-- Golf-ineligible unit, so they are not duplicated here.
+-- =============================================================================
+
+select ok(
+  (
+    select bool_and(participates_in_shared_pool)
+    from public.ownership_units
+    where id in (
+      (select value from test_ids where key = 'belcher_unit'),
+      (select value from test_ids where key = 'belcher_sr_unit'),
+      (select value from test_ids where key = 'tatro_unit')
+    )
+  ),
+  'All existing ownership units receive participates_in_shared_pool = true'
+);
+
+insert into public.ownership_units (
+  membership_id,
+  name,
+  members_description,
+  ownership_percentage,
+  participates_in_golf_pool,
+  participates_in_shared_pool
+)
+values (
+  (select value from test_ids where key = 'membership'),
+  'Test Shared Ineligible Unit',
+  'pgTAP fixture, rolled back',
+  0.0001,
+  false,
+  false
+)
+returning id;
+
+insert into test_ids (key, value)
+select 'shared_ineligible_unit', id
+from public.ownership_units
+where name = 'Test Shared Ineligible Unit'
+order by created_at desc
+limit 1;
+
+select ok(
+  (select value from test_ids where key = 'shared_ineligible_unit') is not null,
+  'Shared-ineligible test fixture unit was created'
+);
+
+select lives_ok(
+  format(
+    $sql$
+      insert into public.people (
+        membership_id, ownership_unit_id, first_name, last_name, participates_in_shared_pool
+      )
+      values (%L, %L, 'SharedOk', 'PgtapFixture', true)
+    $sql$,
+    (select value from test_ids where key = 'membership'),
+    (select value from test_ids where key = 'belcher_unit')
+  ),
+  'A person may participate in Shared under a Shared-eligible unit'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$
+      insert into public.people (
+        membership_id, ownership_unit_id, first_name, last_name, participates_in_shared_pool
+      )
+      values (%L, %L, 'SharedReject', 'PgtapFixture', true)
+    $sql$,
+    (select value from test_ids where key = 'membership'),
+    (select value from test_ids where key = 'shared_ineligible_unit')
+  )),
+  'A person requesting Shared participation under a Shared-ineligible unit is rejected'
+);
+
+select lives_ok(
+  format(
+    $sql$
+      insert into public.people (
+        membership_id, ownership_unit_id, first_name, last_name,
+        participates_in_shared_pool, participates_in_golf_pool
+      )
+      values (%L, %L, 'GolfOk', 'PgtapFixture', true, true)
+    $sql$,
+    (select value from test_ids where key = 'membership'),
+    (select value from test_ids where key = 'belcher_unit')
+  ),
+  'A person may participate in Golf under a Golf-eligible unit'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$
+      insert into public.people (
+        membership_id, ownership_unit_id, first_name, last_name,
+        participates_in_shared_pool, participates_in_golf_pool
+      )
+      values (%L, %L, 'GolfReject', 'PgtapFixture', true, true)
+    $sql$,
+    (select value from test_ids where key = 'membership'),
+    (select value from test_ids where key = 'tatro_unit')
+  )),
+  'A person requesting Golf participation under a Golf-ineligible unit is rejected'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$
+      insert into public.benefit_transactions (
+        membership_id, ownership_unit_id, benefit_grant_id, quantity_used, status, notes
+      )
+      values (%L, %L, %L, 1, 'draft', 'Shared-ineligible unit rejection test')
+    $sql$,
+    (select value from test_ids where key = 'membership'),
+    (select value from test_ids where key = 'shared_ineligible_unit'),
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'A Shared transaction against a Shared-ineligible unit is rejected'
+);
+
+-- =============================================================================
+-- Benefit-grant accounting-field immutability (ISSUE-10 / STEP-3).
+--
+-- shared_grant already has a referencing benefit_transactions row from the
+-- "Draft transaction can be created" step above (voided, but every status
+-- counts as a reference), so it is used directly as the "referenced grant"
+-- fixture below.
+--
+-- A second, otherwise-unused membership row is created so the
+-- membership_id-change test attempts an actual value change rather than
+-- reassigning the same id (which the IS DISTINCT FROM guard would correctly
+-- treat as a no-op and not reject).
+-- =============================================================================
+
+insert into public.memberships (
+  name, contract_number, purchase_price, start_date, expiration_date
+)
+values (
+  'pgTAP Fixture Membership',
+  'PGTAP-FIXTURE-0001',
+  1.00,
+  current_date,
+  current_date + 1
+)
+returning id;
+
+insert into test_ids (key, value)
+select 'other_membership', id
+from public.memberships
+where contract_number = 'PGTAP-FIXTURE-0001';
+
+select ok(
+  pg_temp.statement_raises(format(
+    'update public.benefit_grants set membership_id = %L where id = %L',
+    (select value from test_ids where key = 'other_membership'),
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects membership_id change'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$update public.benefit_grants set pool = 'golf' where id = %L$sql$,
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects pool change'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$update public.benefit_grants set quantity_kind = 'count' where id = %L$sql$,
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects quantity_kind change'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$update public.benefit_grants set original_quantity = original_quantity + 1 where id = %L$sql$,
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects original_quantity change'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$update public.benefit_grants set release_date = current_date where id = %L$sql$,
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects release_date change'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    $sql$update public.benefit_grants set expiration_date = current_date where id = %L$sql$,
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects expiration_date change'
+);
+
+select ok(
+  pg_temp.statement_raises(format(
+    'update public.benefit_grants set created_at = now() where id = %L',
+    (select value from test_ids where key = 'shared_grant')
+  )),
+  'Referenced grant rejects created_at change'
+);
+
+select lives_ok(
+  format(
+    'update public.benefit_grants set name = %L where id = %L',
+    'BPG Weeks (pgTAP renamed)',
+    (select value from test_ids where key = 'shared_grant')
+  ),
+  'Referenced grant still permits name changes'
+);
+
+select lives_ok(
+  format(
+    'update public.benefit_grants set restrictions = %L where id = %L',
+    'pgTAP updated restrictions text',
+    (select value from test_ids where key = 'shared_grant')
+  ),
+  'Referenced grant still permits restrictions changes'
+);
+
+select lives_ok(
+  format(
+    $sql$
+      update public.benefit_grants
+      set archived_at = now(), archived_reason = 'pgTAP archival test'
+      where id = %L
+    $sql$,
+    (select value from test_ids where key = 'shared_grant')
+  ),
+  'Referenced grant still permits archival fields to be set together'
+);
+
+select ok(
+  exists (
+    select 1
+    from public.audit_log
+    where entity_type = 'benefit_grants'
+      and entity_id = (select value from test_ids where key = 'shared_grant')
+      and action = 'UPDATE'
+      and new_data ->> 'name' = 'BPG Weeks (pgTAP renamed)'
+  ),
+  'Successful allowed changes to a referenced grant generate audit_log entries'
+);
+
+insert into test_ids (key, value)
+select 'unreferenced_grant', id
+from public.benefit_grants
+where membership_id = (select value from test_ids where key = 'membership')
+  and id not in (
+    select value from test_ids where key in ('shared_grant', 'golf_grant')
+  )
+  and not exists (
+    select 1
+    from public.benefit_transactions bt
+    where bt.benefit_grant_id = benefit_grants.id
+  )
+order by created_at
+limit 1;
+
+select ok(
+  (select value from test_ids where key = 'unreferenced_grant') is not null,
+  'Unreferenced test fixture grant was found among the seed data'
+);
+
+select lives_ok(
+  format(
+    'update public.benefit_grants set original_quantity = original_quantity + 1 where id = %L',
+    (select value from test_ids where key = 'unreferenced_grant')
+  ),
+  'An unreferenced grant permits accounting-field changes'
 );
 
 select * from finish();

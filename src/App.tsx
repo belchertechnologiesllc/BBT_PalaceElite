@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { DashboardPage } from './pages/DashboardPage';
 import { MembersPage } from './pages/MembersPage';
+import { OwnershipPage } from './pages/OwnershipPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ProfilePage } from './pages/ProfilePage';
 import type { NavigationItem } from './types/navigation';
@@ -21,7 +22,7 @@ export default function App() {
   if (loading) {
     return (
       <main className="login-shell">
-        <p>Loading membership…</p>
+        <p>Loading membershipâ€¦</p>
       </main>
     );
   }
@@ -56,6 +57,9 @@ export default function App() {
 
       case 'Members':
         return <MembersPage />;
+
+      case 'Ownership':
+        return <OwnershipPage />;
 
       case 'Profile':
         return <ProfilePage />;

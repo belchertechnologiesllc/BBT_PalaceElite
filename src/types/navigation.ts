@@ -1,6 +1,7 @@
 export type NavigationItem =
   | 'Dashboard'
   | 'Members'
+  | 'Ownership'
   | 'Benefits'
   | 'Transactions'
   | 'Reservations'
@@ -10,6 +11,7 @@ export type NavigationItem =
 export const navigationItems: NavigationItem[] = [
   'Dashboard',
   'Members',
+  'Ownership',
   'Benefits',
   'Transactions',
   'Reservations',

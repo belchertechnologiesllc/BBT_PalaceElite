@@ -169,6 +169,20 @@ export function MembersPage() {
         }
       />
 
+      {successToast && (
+        <div className="success-toast" role="status">
+          <span>{successToast}</span>
+          <button
+            type="button"
+            className="success-toast-close"
+            aria-label="Dismiss"
+            onClick={() => setSuccessToast(null)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <SlideOver
         open={isAddPersonOpen}
         title="Add Person"

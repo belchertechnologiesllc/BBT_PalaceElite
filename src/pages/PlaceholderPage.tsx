@@ -8,8 +8,7 @@ const descriptions: Record<NavigationItem, string> = {
   Dashboard: '',
   Members:
     'Manage ownership units, household members, and participation eligibility.',
-  Ownership:
-    'Manage ownership units, ownership percentages, and benefit-pool configuration.',
+  Ownership: '',
   Benefits:
     'Review shared and golf benefit pools, balances, and expiration dates.',
   Transactions:

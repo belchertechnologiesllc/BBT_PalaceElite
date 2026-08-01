@@ -18,6 +18,7 @@ export type BenefitGrantRecord = {
   id: string;
   membershipId: string;
   name: string;
+  benefitCode: string;
   pool: BenefitPool;
   quantityKind: QuantityKind;
   originalQuantity: number;
@@ -72,6 +73,7 @@ const BENEFIT_GRANT_COLUMNS = `
   id,
   membership_id,
   name,
+  benefit_code,
   pool,
   quantity_kind,
   original_quantity,
@@ -91,6 +93,7 @@ function mapBenefitGrantRow(
     id: row.id,
     membershipId: row.membership_id,
     name: row.name,
+    benefitCode: row.benefit_code,
     pool: row.pool,
     quantityKind: row.quantity_kind,
     originalQuantity: row.original_quantity,

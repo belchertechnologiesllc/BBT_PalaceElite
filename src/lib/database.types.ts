@@ -85,10 +85,131 @@ export type Database = {
           },
         ]
       }
+      benefit_detail_items: {
+        Row: {
+          benefit_grant_id: string
+          created_at: string
+          display_order: number
+          id: string
+          section: Database["public"]["Enums"]["benefit_detail_section"]
+          source_type: Database["public"]["Enums"]["benefit_detail_source_type"]
+          statement: string
+          updated_at: string
+        }
+        Insert: {
+          benefit_grant_id: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          section: Database["public"]["Enums"]["benefit_detail_section"]
+          source_type: Database["public"]["Enums"]["benefit_detail_source_type"]
+          statement: string
+          updated_at?: string
+        }
+        Update: {
+          benefit_grant_id?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          section?: Database["public"]["Enums"]["benefit_detail_section"]
+          source_type?: Database["public"]["Enums"]["benefit_detail_source_type"]
+          statement?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benefit_detail_items_benefit_grant_id_fkey"
+            columns: ["benefit_grant_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_detail_items_benefit_grant_id_fkey"
+            columns: ["benefit_grant_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_grants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      benefit_grant_details: {
+        Row: {
+          benefit_grant_id: string
+          contract_expiration_text: string | null
+          contract_quantity_text: string | null
+          contract_source_reference: string | null
+          cost_model: Database["public"]["Enums"]["benefit_cost_model"] | null
+          created_at: string
+          discount_percentages: number[] | null
+          gold_season_only: boolean | null
+          guests_included: number | null
+          id: string
+          maximum_nights: number | null
+          minimum_nights: number | null
+          plain_language_summary: string | null
+          service_fee_required: boolean | null
+          stay_plan: Database["public"]["Enums"]["benefit_stay_plan"] | null
+          updated_at: string
+        }
+        Insert: {
+          benefit_grant_id: string
+          contract_expiration_text?: string | null
+          contract_quantity_text?: string | null
+          contract_source_reference?: string | null
+          cost_model?: Database["public"]["Enums"]["benefit_cost_model"] | null
+          created_at?: string
+          discount_percentages?: number[] | null
+          gold_season_only?: boolean | null
+          guests_included?: number | null
+          id?: string
+          maximum_nights?: number | null
+          minimum_nights?: number | null
+          plain_language_summary?: string | null
+          service_fee_required?: boolean | null
+          stay_plan?: Database["public"]["Enums"]["benefit_stay_plan"] | null
+          updated_at?: string
+        }
+        Update: {
+          benefit_grant_id?: string
+          contract_expiration_text?: string | null
+          contract_quantity_text?: string | null
+          contract_source_reference?: string | null
+          cost_model?: Database["public"]["Enums"]["benefit_cost_model"] | null
+          created_at?: string
+          discount_percentages?: number[] | null
+          gold_season_only?: boolean | null
+          guests_included?: number | null
+          id?: string
+          maximum_nights?: number | null
+          minimum_nights?: number | null
+          plain_language_summary?: string | null
+          service_fee_required?: boolean | null
+          stay_plan?: Database["public"]["Enums"]["benefit_stay_plan"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benefit_grant_details_benefit_grant_id_fkey"
+            columns: ["benefit_grant_id"]
+            isOneToOne: true
+            referencedRelation: "benefit_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_grant_details_benefit_grant_id_fkey"
+            columns: ["benefit_grant_id"]
+            isOneToOne: true
+            referencedRelation: "benefit_grants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       benefit_grants: {
         Row: {
           archived_at: string | null
           archived_reason: string | null
+          benefit_code: string
           created_at: string
           expiration_date: string | null
           id: string
@@ -103,6 +224,7 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           archived_reason?: string | null
+          benefit_code?: string
           created_at?: string
           expiration_date?: string | null
           id?: string
@@ -117,6 +239,7 @@ export type Database = {
         Update: {
           archived_at?: string | null
           archived_reason?: string | null
+          benefit_code?: string
           created_at?: string
           expiration_date?: string | null
           id?: string
@@ -640,6 +763,10 @@ export type Database = {
         Args: { p_person_id: string; p_profile_id: string }
         Returns: undefined
       }
+      numeric_array_within_range: {
+        Args: { p_max: number; p_min: number; p_values: number[] }
+        Returns: boolean
+      }
       reorder_people_within_ownership_unit: {
         Args: { p_ownership_unit_id: string; p_person_ids: string[] }
         Returns: undefined
@@ -655,7 +782,28 @@ export type Database = {
     }
     Enums: {
       app_role: "viewer" | "contributor" | "admin"
+      benefit_cost_model: "complimentary" | "discounted" | "credit" | "mixed"
+      benefit_detail_section:
+        | "included"
+        | "excluded"
+        | "eligible_properties"
+        | "season_rules"
+        | "occupancy_rules"
+        | "fees_and_costs"
+        | "redemption_steps"
+        | "confirmation_questions"
+        | "operational_notes"
+      benefit_detail_source_type:
+        | "contract"
+        | "operational"
+        | "inference"
+        | "confirm_before_use"
       benefit_pool: "shared" | "golf"
+      benefit_stay_plan:
+        | "all_inclusive"
+        | "european_plan"
+        | "property_dependent"
+        | "not_applicable"
       quantity_kind: "currency" | "count" | "nights" | "weeks" | "rounds"
       transaction_status: "draft" | "submitted" | "approved" | "voided"
     }
@@ -789,7 +937,31 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["viewer", "contributor", "admin"],
+      benefit_cost_model: ["complimentary", "discounted", "credit", "mixed"],
+      benefit_detail_section: [
+        "included",
+        "excluded",
+        "eligible_properties",
+        "season_rules",
+        "occupancy_rules",
+        "fees_and_costs",
+        "redemption_steps",
+        "confirmation_questions",
+        "operational_notes",
+      ],
+      benefit_detail_source_type: [
+        "contract",
+        "operational",
+        "inference",
+        "confirm_before_use",
+      ],
       benefit_pool: ["shared", "golf"],
+      benefit_stay_plan: [
+        "all_inclusive",
+        "european_plan",
+        "property_dependent",
+        "not_applicable",
+      ],
       quantity_kind: ["currency", "count", "nights", "weeks", "rounds"],
       transaction_status: ["draft", "submitted", "approved", "voided"],
     },

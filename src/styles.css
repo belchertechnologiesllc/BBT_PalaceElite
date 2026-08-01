@@ -1285,6 +1285,17 @@ dd {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  /* .benefit-detail-item-statement's 220px flex-basis is a width basis in
+     the default row layout above, but flex-direction: column (just above)
+     makes the main axis vertical -- the same "220px" would otherwise be
+     read as a *height* basis with flex-grow: 1 filling any extra space,
+     producing large blank gaps under short statements. Reset to
+     content-sized in the column layout. */
+  .benefit-detail-item-statement {
+    flex: none;
+    width: 100%;
+  }
 }
 
 @media (max-width: 640px) {

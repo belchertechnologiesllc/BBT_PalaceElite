@@ -9,14 +9,14 @@ export type OwnershipUnitOption = {
   participates_in_golf_pool: boolean;
 };
 
-export async function getActiveOwnershipUnits(): Promise<
-  OwnershipUnitOption[]
-> {
+export async function getActiveOwnershipUnits(
+  signal?: AbortSignal,
+): Promise<OwnershipUnitOption[]> {
   if (!supabase) {
     throw new Error('Supabase is not configured.');
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('ownership_units')
     .select(`
       id,
@@ -28,6 +28,12 @@ export async function getActiveOwnershipUnits(): Promise<
     `)
     .is('archived_at', null)
     .order('name');
+
+  if (signal) {
+    query = query.abortSignal(signal);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);

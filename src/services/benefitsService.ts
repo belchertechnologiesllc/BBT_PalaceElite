@@ -411,7 +411,11 @@ export async function updateBenefitGrantAccounting(
 // back on, so silently picking the first result would hide a real
 // multi-membership scenario from the caller. `.limit(2)` is enough to tell
 // zero / one / more-than-one apart without fetching every accessible row.
-export async function getBenefitAdministrationContext(): Promise<BenefitAdministrationContext> {
+//
+// Exported so other pages/services needing "the current membership" (e.g.
+// the Dashboard) reuse this exact zero/one/many resolution instead of
+// duplicating it -- see dashboardService.ts.
+export async function resolveAccessibleMembership(): Promise<BenefitMembershipSummary> {
   if (!supabase) {
     throw new Error('Supabase is not configured.');
   }
@@ -442,7 +446,11 @@ export async function getBenefitAdministrationContext(): Promise<BenefitAdminist
     );
   }
 
-  const membership = accessibleMemberships[0];
+  return accessibleMemberships[0];
+}
+
+export async function getBenefitAdministrationContext(): Promise<BenefitAdministrationContext> {
+  const membership = await resolveAccessibleMembership();
   const grants = await getBenefitCatalog(membership.id);
 
   return { membership, grants };

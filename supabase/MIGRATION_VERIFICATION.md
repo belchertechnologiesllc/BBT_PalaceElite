@@ -13,7 +13,13 @@ cover `20260731120000_add_people_display_order.sql` and
 `20260731170000_add_ownership_units_shared_pool.sql`,
 `20260731180000_enforce_symmetric_pool_eligibility.sql`, and
 `20260731190000_protect_benefit_grant_accounting_fields.sql`
-(ISSUE-10 / STEP-3).
+(ISSUE-10 / STEP-3). Sections 19-23 cover
+`20260731200000_add_benefit_detail_enums.sql`,
+`20260731210000_add_benefit_grant_details.sql`,
+`20260731220000_add_benefit_detail_items.sql`,
+`20260731230000_add_benefit_grants_code.sql`, and
+`20260731240000_seed_benefit_detail_content.sql`
+(BENEFIT-DETAILS / STEP-3).
 
 ## 1. Seed data landed correctly
 
@@ -620,3 +626,300 @@ full pgTAP suite in `supabase/tests/001_business_rules.sql` (36 assertions)
 was run against this local instance and passed with zero failures,
 including 20 new assertions added for this work. No migration in this
 range was applied to, or executed against, the hosted Supabase project.
+
+## 19. Benefit-detail enums landed with the load-bearing declaration order
+
+Checks for `supabase/migrations/20260731200000_add_benefit_detail_enums.sql`.
+
+```sql
+select typname, enumlabel, enumsortorder
+from pg_enum
+join pg_type on pg_type.oid = pg_enum.enumtypid
+where typname in (
+  'benefit_cost_model', 'benefit_stay_plan',
+  'benefit_detail_source_type', 'benefit_detail_section'
+)
+order by typname, enumsortorder;
+```
+
+Expect `benefit_cost_model`: `complimentary, discounted, credit, mixed`.
+Expect `benefit_stay_plan`: `all_inclusive, european_plan, property_dependent, not_applicable`.
+Expect `benefit_detail_source_type`: `contract, operational, inference, confirm_before_use`.
+Expect `benefit_detail_section`, **in exactly this order** (load-bearing —
+`order by section` on `benefit_detail_items` relies on it):
+`included, excluded, eligible_properties, season_rules, occupancy_rules, fees_and_costs, redemption_steps, confirmation_questions, operational_notes`.
+
+## 20. `benefit_grant_details` landed correctly
+
+Checks for `supabase/migrations/20260731210000_add_benefit_grant_details.sql`.
+
+```sql
+select column_name, data_type, is_nullable
+from information_schema.columns
+where table_schema = 'public' and table_name = 'benefit_grant_details'
+order by ordinal_position;
+```
+
+Expect all columns nullable except `id`, `benefit_grant_id`, `created_at`,
+`updated_at`.
+
+```sql
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.benefit_grant_details'::regclass
+order by conname;
+```
+
+Expect: a `unique` constraint on `benefit_grant_id`, a foreign key to
+`benefit_grants(id)` with `on delete restrict`, and check constraints for
+`minimum_nights >= 0`, `maximum_nights >= 0`, `guests_included >= 0`,
+`maximum_nights >= minimum_nights`, and the
+`numeric_array_within_range(discount_percentages, 0, 100)` check.
+
+```sql
+select tgname, tgenabled
+from pg_trigger
+where tgrelid = 'public.benefit_grant_details'::regclass and not tgisinternal
+order by tgname;
+```
+
+Expect three rows: `benefit_grant_details_audit_trg`,
+`benefit_grant_details_block_delete_trg`,
+`benefit_grant_details_set_updated_at_trg`, all `tgenabled = 'O'`.
+
+```sql
+select policyname, cmd from pg_policies
+where tablename = 'benefit_grant_details' order by cmd;
+```
+
+Expect exactly three policies: `SELECT` (membership access),
+`INSERT`/`UPDATE` (membership admin only). No `DELETE` policy.
+
+```sql
+select table_name, grantee, privilege_type
+from information_schema.role_table_grants
+where table_name = 'benefit_grant_details' and grantee in ('anon', 'authenticated')
+order by grantee, privilege_type;
+```
+
+Expect `authenticated`: `SELECT`, `INSERT`, `UPDATE` only. `anon`: no rows.
+
+**Important:** `enforce_benefit_grant_immutability_trg` (from
+`20260731190000`) is attached only to `public.benefit_grants`, not to this
+table -- structured content remains editable regardless of whether the
+parent grant has recorded transaction usage. Confirm no such trigger
+appears in the trigger list above.
+
+## 21. `benefit_detail_items` landed correctly
+
+Checks for `supabase/migrations/20260731220000_add_benefit_detail_items.sql`.
+
+```sql
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.benefit_detail_items'::regclass
+order by conname;
+```
+
+Expect: a foreign key to `benefit_grants(id)` with `on delete restrict`, a
+check that `display_order >= 0`, and a check that `statement` is non-blank
+after trim. Expect **no** uniqueness constraint on
+`(benefit_grant_id, section, display_order)` -- an index only:
+
+```sql
+select indexname, indexdef
+from pg_indexes
+where tablename = 'benefit_detail_items';
+```
+
+Expect `benefit_detail_items_grant_section_order_idx` on
+`(benefit_grant_id, section, display_order, id)`, not marked `UNIQUE` in
+`indexdef`.
+
+Triggers, RLS, and grants follow the identical pattern as section 20 above
+(`benefit_detail_items_audit_trg`, `benefit_detail_items_block_delete_trg`,
+`benefit_detail_items_set_updated_at_trg`; SELECT/INSERT/UPDATE policies
+joined through `benefit_grants`; `authenticated` gets SELECT/INSERT/UPDATE
+only, no DELETE).
+
+## 22. `benefit_grants.benefit_code` landed correctly
+
+Checks for `supabase/migrations/20260731230000_add_benefit_grants_code.sql`.
+
+```sql
+select column_name, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'benefit_grants'
+  and column_name = 'benefit_code';
+```
+
+Expect `is_nullable = 'NO'`, `column_default` containing
+`'custom_' || replace(gen_random_uuid()...`.
+
+```sql
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.benefit_grants'::regclass
+  and conname = 'benefit_grants_membership_id_benefit_code_key';
+```
+
+Expect a `unique (membership_id, benefit_code)` constraint.
+
+```sql
+select name, benefit_code from public.benefit_grants order by name;
+```
+
+Expect exactly: `BPG Weeks` to `bpg_weeks`, `Golf Rounds at 50%` to
+`golf_rounds_50`, `Imperial Grand Weeks` to `imperial_grand_weeks`,
+`Incentive Stays` to `incentive_stays`, `Spa Resort Credit` to
+`spa_resort_credit`, `Universal Credit` to `universal_credit`,
+`Unlimited Golf Bonus Nights` to `unlimited_golf_bonus_nights`.
+
+Confirm a newly inserted grant (omitting benefit_code) receives a
+`custom_[0-9a-f]{32}` value -- see `supabase/tests/001_business_rules.sql`
+for an automated version of this check inside a rolled-back transaction;
+do not leave a manual test row in the hosted or local database.
+
+**Revised in STEP-4:** the backfill is now membership-scoped (matched by
+exact `(membership_id, name)`, not `name` alone) and performed by a
+migration-local `do $$ ... $$` block instead of a permanent function. The
+target membership is located with `select ... into strict`, which itself
+raises if zero or more than one membership has exactly the seven expected
+names with no duplicates; a final count query re-verifies exactly 7 rows
+in that membership carry an approved code before the column is finalized.
+No permanent function is left behind:
+
+```sql
+select to_regprocedure('public.validate_benefit_grant_semantic_names()');
+```
+
+Expect `null` (function does not exist).
+
+## 23. Structured content seeded correctly
+
+Checks for `supabase/migrations/20260731240000_seed_benefit_detail_content.sql`.
+
+```sql
+select count(*) from public.benefit_grant_details;
+```
+
+Expect `7`.
+
+```sql
+select g.benefit_code, count(i.id) as item_count
+from public.benefit_grants g
+left join public.benefit_detail_items i on i.benefit_grant_id = g.id
+where g.benefit_code in (
+  'bpg_weeks', 'incentive_stays', 'imperial_grand_weeks', 'spa_resort_credit',
+  'universal_credit', 'golf_rounds_50', 'unlimited_golf_bonus_nights'
+)
+group by g.benefit_code
+order by g.benefit_code;
+```
+
+Expect every row's `item_count` greater than 0 (exact counts as of this
+migration: `bpg_weeks`=10, `golf_rounds_50`=7, `imperial_grand_weeks`=10,
+`incentive_stays`=11, `spa_resort_credit`=8, `universal_credit`=15,
+`unlimited_golf_bonus_nights`=10).
+
+```sql
+select name, original_quantity, quantity_kind, expiration_date
+from public.benefit_grants
+where name in ('Incentive Stays', 'Golf Rounds at 50%', 'Spa Resort Credit', 'Unlimited Golf Bonus Nights')
+order by name;
+```
+
+Expect these accounting fields **unchanged** from section 1: Incentive
+Stays `original_quantity = 6` (not corrected to the contract table's
+apparent 4), Golf Rounds at 50% `expiration_date` still `null`, Spa Resort
+Credit `name` still exactly `Spa Resort Credit` (not renamed to add "...
+Pack"), Unlimited Golf Bonus Nights `original_quantity = 8`.
+
+```sql
+select bg.name, d.discount_percentages
+from public.benefit_grant_details d
+join public.benefit_grants bg on bg.id = d.benefit_grant_id
+order by bg.name;
+```
+
+Expect only BPG Weeks (`{20,30,60}`), Incentive Stays (`{20,30}`), and Golf
+Rounds at 50% (`{50}`) to have non-null `discount_percentages`; every other
+benefit `null`.
+
+## 24. `numeric_array_within_range` rejects null elements
+
+Checks for the revised `supabase/migrations/20260731210000_add_benefit_grant_details.sql`.
+
+```sql
+select public.numeric_array_within_range(null, 0, 100);        -- expect true
+select public.numeric_array_within_range(array[]::numeric[], 0, 100); -- expect true
+select public.numeric_array_within_range(array[0,100]::numeric[], 0, 100); -- expect true
+select public.numeric_array_within_range(array[-1]::numeric[], 0, 100);    -- expect false
+select public.numeric_array_within_range(array[101]::numeric[], 0, 100);   -- expect false
+select public.numeric_array_within_range(array[20, null]::numeric[], 0, 100); -- expect false
+```
+
+A non-null array containing a null element is treated as invalid (decided
+behavior), since a bare `v < p_min or v > p_max` comparison against a null
+element evaluates to null (not true), which would otherwise let it pass
+silently through `not exists(...)`. Execute privilege on this function is
+revoked from `public` and granted only to `authenticated` (least privilege;
+matches who is allowed to write `benefit_grant_details` rows at all).
+
+## 25. Membership-scoped semantic code identity and reuse
+
+Checks for the revised `supabase/migrations/20260731230000_add_benefit_grants_code.sql`
+and the corresponding pgTAP assertions.
+
+```sql
+select membership_id, count(*)
+from public.benefit_grants
+where benefit_code in (
+  'bpg_weeks', 'incentive_stays', 'imperial_grand_weeks', 'spa_resort_credit',
+  'universal_credit', 'golf_rounds_50', 'unlimited_golf_bonus_nights'
+)
+group by membership_id
+having count(*) = 7 and count(distinct benefit_code) = 7;
+```
+
+Expect exactly one row (one membership has all seven approved codes, each
+once). A second membership inserting a grant with an already-used code
+(e.g. `bpg_weeks`) succeeds, since `benefit_grants_membership_id_benefit_code_key`
+is scoped to `(membership_id, benefit_code)`; a duplicate code within the
+*same* membership is rejected. Both cases are exercised directly in
+`supabase/tests/001_business_rules.sql`.
+
+## 26. `benefitsService.ts` / `benefitDetailsService.ts`
+
+`src/services/benefitsService.ts`'s `BENEFIT_GRANT_COLUMNS`,
+`BenefitGrantRecord`, and `mapBenefitGrantRow` now include `benefit_code`
+(exposed to callers as `benefitCode`). `createBenefitGrant` still does not
+accept or require a caller-supplied `benefitCode` -- the database default
+continues to generate it, and the returned record now reflects the
+generated value because it flows through the same `mapBenefitGrantRow`
+helper as every other method. No other behavior changed.
+
+`src/services/benefitDetailsService.ts` is new: a read-only service
+exposing `getBenefitDetail(benefitGrantId)`, returning
+`{ detail, items } | null`. `items` are ordered client-side using an
+explicit `SECTION_ORDER` map mirroring `benefit_detail_section`'s Postgres
+enum declaration order (PostgREST does not expose enum ordinal ordering
+through `.order()`), with `displayOrder` then `id` as tie-breakers. Returns
+`null` only when no `benefit_grant_details` row exists for the grant; a
+details row with zero items returns `items: []`, not an error or null.
+
+---
+
+**Note on local validation performed for sections 19-26:** applied and
+verified against the same local Docker Postgres instance used for sections
+15-18 (`supabase_db_BBT_PalaceElite`), not the connected/hosted project,
+via a full `supabase db reset` (clean reapply of every migration from
+scratch, not a manual patch of the previously-applied STEP-3 schema). The
+full pgTAP suite in `supabase/tests/001_business_rules.sql` (84 assertions,
+48 new since the pre-STEP-3 baseline of 36) was run against this local
+instance and passed with zero failures. No migration in this range was
+applied to, or executed against, the hosted Supabase project.
+
+**STEP-3 follow-up resolved:** `npm run build` now passes. The prior
+blocker (`benefitsService.ts` missing `benefit_code`) is fixed -- see
+section 26.

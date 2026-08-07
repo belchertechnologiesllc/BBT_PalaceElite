@@ -169,7 +169,10 @@ async function invokePendingRpc(
 ): Promise<unknown> {
   const client = requireSupabase();
 
-  const rpc = client.rpc as unknown as (
+  // SupabaseClient.rpc relies on its client instance (`this.rest`). Bind the
+  // method before narrowing its type so lifecycle RPC calls retain that
+  // context instead of failing at runtime with `this` undefined.
+  const rpc = client.rpc.bind(client) as unknown as (
     functionName: string,
     parameters: Record<string, unknown>,
   ) => Promise<RpcResult>;

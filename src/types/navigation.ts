@@ -4,6 +4,7 @@ export type NavigationItem =
   | 'Ownership'
   | 'Benefits'
   | 'Transactions'
+  | 'Accounting'
   | 'Reservations'
   | 'Profile'
   | 'Administration';
@@ -14,6 +15,7 @@ export const navigationItems: NavigationItem[] = [
   'Ownership',
   'Benefits',
   'Transactions',
+  'Accounting',
   'Reservations',
   'Profile',
   'Administration',

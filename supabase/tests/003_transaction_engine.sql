@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(22);
+select plan(25);
 
 create or replace function pg_temp.statement_raises(p_sql text)
 returns boolean
@@ -142,11 +142,8 @@ values (
   1,
   'submitted',
   'Legacy-shaped use transaction'
-)
-returning id into temporary table legacy_use_id;
+);
 
--- PostgreSQL does not support RETURNING INTO TEMP TABLE in plain SQL, so store
--- the row identifier explicitly after the insert.
 insert into transaction_engine_ids (key, value)
 select 'use_transaction', id
 from public.benefit_transactions

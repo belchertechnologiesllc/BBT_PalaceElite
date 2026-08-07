@@ -12,6 +12,8 @@ const descriptions: Record<NavigationItem, string> = {
   Benefits: '',
   Transactions:
     'Record benefit activity while preserving the complete audit history.',
+  Accounting:
+    'Review ownership-unit allocations, historical positions, and ledger reconciliation.',
   Reservations:
     'Track planned stays, confirmations, travelers, and benefit usage.',
   Profile:

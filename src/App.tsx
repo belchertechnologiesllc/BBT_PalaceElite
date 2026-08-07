@@ -9,6 +9,7 @@ import { MembersPage } from './pages/MembersPage';
 import { OwnershipPage } from './pages/OwnershipPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { TransactionsPage } from './pages/TransactionsPage';
 import type { NavigationItem } from './types/navigation';
 
 export default function App() {
@@ -64,6 +65,9 @@ export default function App() {
 
       case 'Benefits':
         return <BenefitsPage />;
+
+      case 'Transactions':
+        return <TransactionsPage />;
 
       case 'Profile':
         return <ProfilePage />;

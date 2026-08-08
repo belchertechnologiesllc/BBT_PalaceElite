@@ -1,0 +1,117 @@
+.accounting-asof-panel {
+  overflow: visible;
+}
+
+.accounting-filter-heading {
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.accounting-filter-heading p:last-child,
+.accounting-pool-panel .panel-heading p:last-child {
+  margin: .35rem 0 0;
+  color: #667287;
+}
+
+.accounting-date-form {
+  display: flex;
+  align-items: flex-end;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.accounting-date-form .form-field {
+  min-width: 180px;
+}
+
+.accounting-date-form .secondary-button {
+  min-height: 2.75rem;
+}
+
+.accounting-note {
+  display: flex;
+  gap: .65rem;
+  align-items: flex-start;
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  border: 1px solid #d8deea;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #4f5c70;
+}
+
+.accounting-note strong {
+  flex: 0 0 auto;
+  color: #18243a;
+}
+
+.accounting-benefit-list {
+  display: grid;
+  gap: 1rem;
+  padding: 18px;
+}
+
+.accounting-benefit {
+  overflow: hidden;
+  border: 1px solid #e1e6ee;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.accounting-benefit-heading {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.accounting-benefit-heading > div {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.accounting-benefit-heading h4 {
+  margin: 0;
+}
+
+.accounting-unit-table th,
+.accounting-unit-table td,
+.accounting-reconciliation-table th,
+.accounting-reconciliation-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.accounting-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: .74rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.accounting-status-ok {
+  background: #e8f5ec;
+  color: #27623b;
+}
+
+.accounting-status-review {
+  background: #fff2c2;
+  color: #6c4f08;
+}
+
+@media (max-width: 760px) {
+  .accounting-filter-heading,
+  .accounting-date-form,
+  .accounting-note {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accounting-date-form .form-field,
+  .accounting-date-form .secondary-button {
+    width: 100%;
+  }
+}

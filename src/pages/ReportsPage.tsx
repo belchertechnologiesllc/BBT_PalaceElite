@@ -148,11 +148,11 @@ const USAGE_COLUMNS: ExportColumn<BenefitUsageReportRow>[] = [
 const POOL_COLUMNS: ExportColumn<PoolActivityReportRow>[] = [
   { header: 'Pool', value: (row) => row.pool },
   { header: 'Ownership unit', value: (row) => row.ownershipUnitName },
-  { header: 'Quantity kind', value: (row) => row.quantityKind },
-  { header: 'Approved transaction count', value: (row) => row.transactionCount },
-  { header: 'Net quantity change', value: (row) => row.netQuantityDelta },
-  { header: 'Gross use quantity', value: (row) => row.useQuantity },
-  { header: 'Gross use economic value', value: (row) => row.economicValueRecorded },
+  { header: 'Unit type', value: (row) => row.quantityKind },
+  { header: 'Approved entries', value: (row) => row.transactionCount },
+  { header: 'Gross use', value: (row) => row.useQuantity },
+  { header: 'Net change', value: (row) => row.netQuantityDelta },
+  { header: 'Gross use value', value: (row) => row.economicValueRecorded },
 ];
 
 const AUDIT_COLUMNS: ExportColumn<AuditReportRow>[] = [

@@ -10,6 +10,7 @@ import { MembersPage } from './pages/MembersPage';
 import { OwnershipPage } from './pages/OwnershipPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ReportsPage } from './pages/ReportsPage';
 import { TransactionsPage } from './pages/TransactionsPage';
 import type { NavigationItem } from './types/navigation';
 
@@ -56,7 +57,7 @@ export default function App() {
   const renderActivePage = () => {
     switch (activePage) {
       case 'Dashboard':
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={handleNavigation} />;
 
       case 'Members':
         return <MembersPage />;
@@ -72,6 +73,9 @@ export default function App() {
 
       case 'Accounting':
         return <AccountingPage />;
+
+      case 'Reports':
+        return <ReportsPage />;
 
       case 'Profile':
         return <ProfilePage />;

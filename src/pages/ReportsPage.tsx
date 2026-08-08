@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { PageHeader } from '../components/layout/PageHeader';
 import {
   exportCsv,
@@ -151,8 +151,8 @@ const POOL_COLUMNS: ExportColumn<PoolActivityReportRow>[] = [
   { header: 'Quantity kind', value: (row) => row.quantityKind },
   { header: 'Approved transaction count', value: (row) => row.transactionCount },
   { header: 'Net quantity change', value: (row) => row.netQuantityDelta },
-  { header: 'Use quantity', value: (row) => row.useQuantity },
-  { header: 'Economic value recorded', value: (row) => row.economicValueRecorded },
+  { header: 'Gross use quantity', value: (row) => row.useQuantity },
+  { header: 'Gross use economic value', value: (row) => row.economicValueRecorded },
 ];
 
 const AUDIT_COLUMNS: ExportColumn<AuditReportRow>[] = [
@@ -207,8 +207,6 @@ export function ReportsPage() {
 
   useEffect(() => {
     void loadReports(fromDate, toDate);
-    // Initial load only. Date changes apply when the user submits the filter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleFilter(event: FormEvent<HTMLFormElement>) {
@@ -293,8 +291,8 @@ export function ReportsPage() {
           )}
 
           {activeTab === 'pool-activity' && (
-            <ReportPanel title="Pool activity report" description="Approved activity grouped without mixing Shared and Golf pools or unlike quantity units." actions={<ReportExportButtons title={`Palace Elite Pool Activity ${dateRangeLabel}`} rows={snapshot.poolActivity} columns={POOL_COLUMNS} />}>
-              {snapshot.poolActivity.length === 0 ? <EmptyReport /> : <div className="table-wrap"><table><thead><tr><th>Pool</th><th>Ownership unit</th><th>Unit type</th><th>Approved entries</th><th>Use quantity</th><th>Net change</th><th>Economic value</th></tr></thead><tbody>
+            <ReportPanel title="Pool activity report" description="Approved activity grouped without mixing Shared and Golf pools or unlike quantity units. Gross use fields show approved use rows; net change also reflects corrections, reversals, adjustments, earns, and imports." actions={<ReportExportButtons title={`Palace Elite Pool Activity ${dateRangeLabel}`} rows={snapshot.poolActivity} columns={POOL_COLUMNS} />}>
+              {snapshot.poolActivity.length === 0 ? <EmptyReport /> : <div className="table-wrap"><table><thead><tr><th>Pool</th><th>Ownership unit</th><th>Unit type</th><th>Approved entries</th><th>Gross use</th><th>Net change</th><th>Gross use value</th></tr></thead><tbody>
                 {snapshot.poolActivity.map((row) => <tr key={`${row.pool}-${row.ownershipUnitName}-${row.quantityKind}`}><td><span className={`pool-tag ${row.pool}`}>{row.pool === 'shared' ? 'Shared' : 'Golf'}</span></td><td><strong>{row.ownershipUnitName}</strong></td><td>{row.quantityKind}</td><td>{row.transactionCount}</td><td>{formatQuantity(row.quantityKind, row.useQuantity).replace(/^\+/, '')}</td><td className={row.netQuantityDelta < 0 ? 'quantity-negative' : row.netQuantityDelta > 0 ? 'quantity-positive' : ''}>{formatQuantity(row.quantityKind, row.netQuantityDelta)}</td><td>{formatCurrency(row.economicValueRecorded)}</td></tr>)}
               </tbody></table></div>}
             </ReportPanel>
@@ -317,7 +315,7 @@ export function ReportsPage() {
   );
 }
 
-function ReportPanel({ title, description, actions, children }: { title: string; description: string; actions: React.ReactNode; children: React.ReactNode }) {
+function ReportPanel({ title, description, actions, children }: { title: string; description: string; actions: ReactNode; children: ReactNode }) {
   return <section className="panel report-panel"><div className="panel-heading report-panel-heading"><div><p className="eyebrow">Report</p><h3>{title}</h3><p>{description}</p></div>{actions}</div>{children}</section>;
 }
 

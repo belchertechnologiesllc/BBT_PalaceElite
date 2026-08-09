@@ -1,57 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { PageHeader } from '../components/layout/PageHeader';
 import {
   getDashboardData,
-  type DashboardBenefitRow,
   type DashboardData,
   type QuantityKind,
 } from '../services/dashboardService';
-import { formatDate } from './BenefitsPage';
-
-// -----------------------------------------------------------------------
-// Family equity position -- intentionally still static.
-//
-// Per-unit "shared value received" and golf rounds/nights "used" require
-// aggregating public.benefit_transactions by ownership_unit_id and pool,
-// which has no corresponding UI/service anywhere in this app yet (no
-// transaction-entry workflow exists -- the "Add transaction" button below
-// is already disabled for exactly this reason). Wiring live ownership
-// unit *names* here while leaving invented numeric caps (the "/10
-// rounds", "/4 nights" denominators below are not backed by any real
-// per-unit limit in the schema) would be more misleading than leaving
-// this table static and clearly out of scope until that workflow exists.
-// See docs/claude-reports/DASHBOARD-LIVE-BENEFITS.md for the full
-// live-vs-static classification.
-type OwnershipUnit = {
-  name: string;
-  members: string;
-  sharedValue: number;
-  golfRoundsUsed: number | null;
-  golfNightsUsed: number | null;
-};
-
-const units: OwnershipUnit[] = [
-  {
-    name: 'Belcher',
-    members: 'Anthony, Kristin, and children',
-    sharedValue: 0,
-    golfRoundsUsed: 0,
-    golfNightsUsed: 0,
-  },
-  {
-    name: 'Belcher Sr.',
-    members: 'Mike and Theresa',
-    sharedValue: 0,
-    golfRoundsUsed: 0,
-    golfNightsUsed: 0,
-  },
-  {
-    name: 'Tatro',
-    members: 'Larry, Angie, and Spencer',
-    sharedValue: 0,
-    golfRoundsUsed: null,
-    golfNightsUsed: null,
-  },
-];
+import type { NavigationItem } from '../types/navigation';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', {
@@ -59,153 +13,81 @@ const formatCurrency = (value: number) =>
     currency: 'USD',
   }).format(value);
 
-// Singular/plural unit words for each quantity_kind except 'currency'
-// (formatted as money, not counted). 'count' has no single natural noun
-// tied to it (unlike weeks/nights/rounds) since it's used for whatever a
-// benefit's administrator chose as a plain countable allocation -- "use"/
-// "uses" is a deliberately generic, non-benefit-specific label, not a
-// per-benefit-name branch.
-const QUANTITY_UNIT_WORDS: Record<
-  Exclude<QuantityKind, 'currency'>,
-  { singular: string; plural: string }
-> = {
-  weeks: { singular: 'week', plural: 'weeks' },
-  nights: { singular: 'night', plural: 'nights' },
-  rounds: { singular: 'round', plural: 'rounds' },
-  count: { singular: 'use', plural: 'uses' },
+const QUANTITY_LABELS: Record<Exclude<QuantityKind, 'currency'>, [string, string]> = {
+  weeks: ['week', 'weeks'],
+  nights: ['night', 'nights'],
+  rounds: ['round', 'rounds'],
+  count: ['item', 'items'],
 };
 
-function formatBenefitQuantity(kind: QuantityKind, value: number): string {
+function formatQuantity(kind: QuantityKind, value: number, signed = false): string {
   if (kind === 'currency') {
-    return formatCurrency(value);
+    const formatted = formatCurrency(Math.abs(value));
+    if (!signed || value === 0) return value < 0 ? `−${formatted}` : formatted;
+    return `${value > 0 ? '+' : '−'}${formatted}`;
   }
 
-  const words = QUANTITY_UNIT_WORDS[kind];
-  const word = value === 1 ? words.singular : words.plural;
-  return `${value} ${word}`;
+  const magnitude = Math.abs(value);
+  const formatted = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(magnitude);
+  const [singular, plural] = QUANTITY_LABELS[kind];
+  const label = magnitude === 1 ? singular : plural;
+  const sign = signed && value !== 0 ? (value > 0 ? '+' : '−') : value < 0 ? '−' : '';
+  return `${sign}${formatted} ${label}`;
 }
 
-function formatExpiration(expirationDate: string | null): string {
-  if (!expirationDate) {
-    return 'No date listed';
-  }
-
-  return formatDate(expirationDate) ?? 'No date listed';
+function formatDate(value: string): string {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
-// Earliest upcoming (today or later) expiration among live benefits, with
-// every benefit name that shares that exact date -- never a single
-// hard-coded name. ISO 'YYYY-MM-DD' strings sort lexicographically in
-// chronological order, so plain string comparison is sufficient.
-function findNextExpiration(
-  benefits: DashboardBenefitRow[],
-): { date: string; names: string[] } | null {
-  const todayIso = new Date().toISOString().slice(0, 10);
-
-  const upcoming = benefits.filter(
-    (benefit): benefit is DashboardBenefitRow & { expirationDate: string } =>
-      benefit.expirationDate !== null && benefit.expirationDate >= todayIso,
-  );
-
-  if (upcoming.length === 0) {
-    return null;
-  }
-
-  const earliestDate = upcoming.reduce(
-    (earliest, benefit) =>
-      benefit.expirationDate < earliest ? benefit.expirationDate : earliest,
-    upcoming[0].expirationDate,
-  );
-
-  const names = upcoming
-    .filter((benefit) => benefit.expirationDate === earliestDate)
-    .map((benefit) => benefit.name);
-
-  return { date: earliestDate, names };
-}
-
-export function DashboardPage() {
+export function DashboardPage({ onNavigate }: { onNavigate: (item: NavigationItem) => void }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // An AbortController (rather than just a "cancelled" boolean guard) is
-  // used here specifically because React 18 StrictMode intentionally
-  // double-invokes effects in development -- without a real abort signal
-  // wired into the underlying Supabase/PostgREST fetch calls, the first
-  // invocation's in-flight requests would still hit the network even
-  // though their results are discarded, showing up as spurious aborted
-  // requests during local development. Aborting them outright avoids that
-  // noise entirely, not just the stale-state-update it would otherwise
-  // cause.
   useEffect(() => {
-    const controller = new AbortController();
-
+    let cancelled = false;
     async function load() {
       setLoading(true);
       setErrorMessage(null);
-
       try {
-        const result = await getDashboardData(controller.signal);
-        setData(result);
+        const result = await getDashboardData();
+        if (!cancelled) setData(result);
       } catch (error) {
-        if (controller.signal.aborted) {
-          return;
+        if (!cancelled) {
+          setData(null);
+          setErrorMessage(error instanceof Error ? error.message : 'Unable to load the dashboard.');
         }
-
-        setData(null);
-        setErrorMessage(
-          error instanceof Error ? error.message : 'Unable to load the dashboard.',
-        );
       } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
-
     void load();
-
-    return () => {
-      controller.abort();
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // Static pending the transaction/reservation workflow -- see the
-  // `units` comment above.
-  const totalSharedValue = useMemo(
-    () => units.reduce((sum, unit) => sum + unit.sharedValue, 0),
-    [],
-  );
-
-  const perUnitPurchasePrice =
-    data && data.ownershipUnits.length > 0
-      ? data.membership.purchasePrice / data.ownershipUnits.length
-      : null;
-
-  const nextExpiration = useMemo(
-    () => (data ? findNextExpiration(data.benefits) : null),
+  const nextExpiration = data?.expirations[0] ?? null;
+  const reconciliationOk = (data?.summary.unreconciledBenefits ?? 0) === 0;
+  const totalOwnership = useMemo(
+    () => data?.ownershipPositions.reduce((sum, row) => sum + row.ownershipPercentage, 0) ?? 0,
     [data],
   );
 
   return (
     <>
-      <section className="page-heading">
-        <div>
-          <p className="eyebrow">Overview</p>
-          <h2>Dashboard</h2>
-          <p className="subtitle">
-            Current membership position and benefit availability.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="Overview"
+        title="Dashboard"
+        subtitle="Live membership balances, accounting health, expirations, and recent activity."
+      />
 
-      {loading && (
-        <section className="panel members-status">
-          <p>Loading dashboard...</p>
-        </section>
-      )}
-
+      {loading && <section className="panel members-status"><p>Loading dashboard…</p></section>}
       {!loading && errorMessage && (
         <section className="panel members-status error-state" role="alert">
           <p className="eyebrow">Unable to load dashboard</p>
@@ -216,82 +98,56 @@ export function DashboardPage() {
 
       {!loading && !errorMessage && data && (
         <>
-          <section className="metrics-grid" aria-label="Membership summary">
+          <section className="metrics-grid dashboard-metrics" aria-label="Membership summary">
             <article className="metric-card">
               <span>Purchase price</span>
               <strong>{formatCurrency(data.membership.purchasePrice)}</strong>
-              <small>
-                {perUnitPurchasePrice !== null
-                  ? `${formatCurrency(perUnitPurchasePrice)} per ownership unit`
-                  : 'No ownership units on record'}
-              </small>
+              <small>{data.summary.activeMembers} active members across {data.summary.activeOwnershipUnits} ownership units</small>
             </article>
-
-            <article className="metric-card">
-              <span>Shared value recorded</span>
-              <strong>{formatCurrency(totalSharedValue)}</strong>
-              <small>Economic value, not cash owed</small>
+            <article className={`metric-card ${data.summary.pendingApprovals > 0 ? 'warning' : ''}`}>
+              <span>Awaiting approval</span>
+              <strong>{data.summary.pendingApprovals}</strong>
+              <small>{data.summary.approvedTransactions30d} approved ledger entries in the last 30 days</small>
             </article>
-
-            <article className="metric-card warning">
+            <article className={`metric-card ${nextExpiration ? 'warning' : ''}`}>
               <span>Next known expiration</span>
-              <strong>
-                {nextExpiration ? formatDate(nextExpiration.date) : 'None scheduled'}
-              </strong>
-              <small>
-                {nextExpiration
-                  ? nextExpiration.names.join(', ')
-                  : 'No benefits have a recorded expiration date'}
-              </small>
+              <strong>{nextExpiration ? formatDate(nextExpiration.expirationDate) : 'None scheduled'}</strong>
+              <small>{nextExpiration ? nextExpiration.benefitName : 'No active benefit has a future expiration date'}</small>
             </article>
-
-            <article className="metric-card">
-              <span>Open reservations</span>
-              <strong>{data.openReservationsCount}</strong>
-              <small>
-                {data.openReservationsCount === 0
-                  ? 'No trips entered yet'
-                  : `${data.openReservationsCount} ${data.openReservationsCount === 1 ? 'trip' : 'trips'} on the books`}
-              </small>
+            <article className={`metric-card ${reconciliationOk ? '' : 'warning'}`}>
+              <span>Accounting control</span>
+              <strong>{reconciliationOk ? 'Reconciled' : `${data.summary.unreconciledBenefits} review`}</strong>
+              <small>{reconciliationOk ? 'All grant totals match ownership-unit positions' : 'Open Accounting to investigate differences'}</small>
             </article>
           </section>
 
+          <section className="dashboard-quick-actions" aria-label="Quick actions">
+            <button type="button" onClick={() => onNavigate('Transactions')}><strong>Add transaction</strong><span>Record benefit activity</span></button>
+            <button type="button" onClick={() => onNavigate('Accounting')}><strong>Review accounting</strong><span>Owner positions & reconciliation</span></button>
+            <button type="button" onClick={() => onNavigate('Reports')}><strong>Run reports</strong><span>CSV, Excel & PDF exports</span></button>
+            <button type="button" onClick={() => onNavigate('Benefits')}><strong>Benefit catalog</strong><span>Inventory & restrictions</span></button>
+          </section>
+
           <section className="panel">
-            <div className="panel-heading">
+            <div className="panel-heading dashboard-panel-heading">
               <div>
                 <p className="eyebrow">Ownership</p>
                 <h3>Family equity position</h3>
+                <p>Live ownership configuration and current Golf positions. Shared activity counts are ledger-derived.</p>
               </div>
-
-              <button type="button" disabled>
-                Add transaction
-              </button>
+              <span className={`dashboard-control-badge ${Math.abs(totalOwnership - 100) < 0.0001 ? 'ok' : 'review'}`}>{totalOwnership.toFixed(4)}% ownership</span>
             </div>
-
             <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ownership unit</th>
-                    <th>Members</th>
-                    <th>Shared value received</th>
-                    <th>Golf allocation</th>
-                  </tr>
-                </thead>
-
+              <table className="dashboard-ownership-table">
+                <thead><tr><th>Ownership unit</th><th>Members</th><th>Ownership</th><th>Shared activity</th><th>Golf position</th></tr></thead>
                 <tbody>
-                  {units.map((unit) => (
-                    <tr key={unit.name}>
-                      <td>
-                        <strong>{unit.name}</strong>
-                      </td>
-                      <td>{unit.members}</td>
-                      <td>{formatCurrency(unit.sharedValue)}</td>
-                      <td>
-                        {unit.golfRoundsUsed === null
-                          ? 'Not participating'
-                          : `${unit.golfRoundsUsed}/10 rounds | ${unit.golfNightsUsed}/4 nights`}
-                      </td>
+                  {data.ownershipPositions.map((row) => (
+                    <tr key={row.id}>
+                      <td><strong>{row.name}</strong></td>
+                      <td>{row.membersDescription || `${row.activeMemberCount} active member${row.activeMemberCount === 1 ? '' : 's'}`}</td>
+                      <td>{row.ownershipPercentage.toFixed(4)}%</td>
+                      <td>{row.participatesInSharedPool ? `${row.sharedActivityCount} approved ledger entr${row.sharedActivityCount === 1 ? 'y' : 'ies'}` : 'Not participating'}</td>
+                      <td>{row.participatesInGolfPool ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(row.golfRoundsPosition ?? 0)} rounds | ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(row.golfNightsPosition ?? 0)} nights` : 'Not participating'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -299,59 +155,36 @@ export function DashboardPage() {
             </div>
           </section>
 
+          <section className="dashboard-two-column">
+            <section className="panel">
+              <div className="panel-heading dashboard-panel-heading"><div><p className="eyebrow">Ledger</p><h3>Recent activity</h3><p>Latest transaction entries, including pending and corrective history.</p></div><button type="button" className="secondary-button" onClick={() => onNavigate('Transactions')}>View all</button></div>
+              {data.recentActivity.length === 0 ? <div className="members-status"><p>No transaction activity yet.</p></div> : (
+                <div className="table-wrap"><table className="dashboard-activity-table"><thead><tr><th>Date</th><th>Activity</th><th>Owner</th><th>Change</th><th>Status</th></tr></thead><tbody>
+                  {data.recentActivity.map((row) => <tr key={row.id}><td>{formatDate(row.effectiveDate)}</td><td><strong>{row.benefitName}</strong><small>{row.transactionType}</small></td><td>{row.ownershipUnitName}</td><td className={row.quantityDelta < 0 ? 'quantity-negative' : row.quantityDelta > 0 ? 'quantity-positive' : ''}>{formatQuantity(row.quantityKind, row.quantityDelta, true)}</td><td><span className={`transaction-status transaction-status-${row.status}`}>{row.status}</span></td></tr>)}
+                </tbody></table></div>
+              )}
+            </section>
+
+            <section className="panel">
+              <div className="panel-heading dashboard-panel-heading"><div><p className="eyebrow">Expiration watch</p><h3>Upcoming expirations</h3><p>{data.summary.futureExpirations} active benefit{data.summary.futureExpirations === 1 ? '' : 's'} with a future expiration date.</p></div></div>
+              {data.expirations.length === 0 ? <div className="members-status"><p>No future expirations are recorded.</p></div> : (
+                <div className="dashboard-expiration-list">
+                  {data.expirations.slice(0, 5).map((row) => <article key={row.benefitGrantId}><div><strong>{row.benefitName}</strong><span className={`pool-tag ${row.pool}`}>{row.pool === 'shared' ? 'Shared' : 'Golf'}</span></div><div><strong>{formatDate(row.expirationDate)}</strong><small>{formatQuantity(row.quantityKind, row.remainingQuantity)} remaining</small></div></article>)}
+                </div>
+              )}
+            </section>
+          </section>
+
           <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Inventory</p>
-                <h3>Available membership benefits</h3>
-              </div>
+            <div className="panel-heading dashboard-panel-heading"><div><p className="eyebrow">Inventory</p><h3>Available membership benefits</h3><p>Authoritative remaining quantities from the approved append-only ledger.</p></div></div>
+            <div className="benefit-grid">
+              {data.benefits.map((benefit) => (
+                <article className="benefit-card" key={benefit.id}>
+                  <div className="benefit-title-row"><h4>{benefit.name}</h4><span className={`pool-tag ${benefit.pool}`}>{benefit.pool === 'shared' ? 'Shared' : 'Golf'}</span></div>
+                  <dl><div><dt>Remaining</dt><dd>{formatQuantity(benefit.quantityKind, benefit.remainingQuantity)}</dd></div><div><dt>Original</dt><dd>{formatQuantity(benefit.quantityKind, benefit.originalQuantity)}</dd></div><div><dt>Expires</dt><dd>{benefit.expirationDate ? formatDate(benefit.expirationDate) : 'No expiration'}</dd></div></dl>
+                </article>
+              ))}
             </div>
-
-            {data.benefits.length === 0 ? (
-              <div className="members-status">
-                <p className="eyebrow">No records</p>
-                <h3>No benefits found for this membership.</h3>
-                <p>Contact a membership administrator if this seems wrong.</p>
-              </div>
-            ) : (
-              <div className="benefit-grid">
-                {data.benefits.map((benefit) => (
-                  <article className="benefit-card" key={benefit.id}>
-                    <div className="benefit-title-row">
-                      <h4>{benefit.name}</h4>
-                      <span className={`pool-tag ${benefit.pool}`}>
-                        {benefit.pool === 'shared' ? 'Shared' : 'Golf'}
-                      </span>
-                    </div>
-
-                    <dl>
-                      <div>
-                        <dt>Remaining</dt>
-                        <dd>
-                          {formatBenefitQuantity(
-                            benefit.quantityKind,
-                            benefit.remainingQuantity,
-                          )}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Original</dt>
-                        <dd>
-                          {formatBenefitQuantity(
-                            benefit.quantityKind,
-                            benefit.originalQuantity,
-                          )}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Expires</dt>
-                        <dd>{formatExpiration(benefit.expirationDate)}</dd>
-                      </div>
-                    </dl>
-                  </article>
-                ))}
-              </div>
-            )}
           </section>
         </>
       )}

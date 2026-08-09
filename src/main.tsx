@@ -5,6 +5,7 @@ import { AuthProvider } from './auth/AuthProvider';
 import './styles.css';
 import './transactions.css';
 import './accounting.css';
+import './reports.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

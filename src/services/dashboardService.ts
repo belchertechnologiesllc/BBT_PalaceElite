@@ -1,13 +1,15 @@
 import { supabase } from '../lib/supabase';
-import type { Database } from '../lib/database.types';
-import { resolveAccessibleMembership } from './benefitsService';
 import {
-  getActiveOwnershipUnits,
-  type OwnershipUnitOption,
-} from './ownershipUnitsService';
+  resolveAccessibleMembership,
+  type BenefitPool,
+  type QuantityKind,
+} from './benefitsService';
+import type {
+  BenefitTransactionType,
+  TransactionStatus,
+} from './transactionsService';
 
-export type BenefitPool = Database['public']['Enums']['benefit_pool'];
-export type QuantityKind = Database['public']['Enums']['quantity_kind'];
+export type { QuantityKind } from './benefitsService';
 
 export type DashboardBenefitRow = {
   id: string;
@@ -19,168 +21,201 @@ export type DashboardBenefitRow = {
   expirationDate: string | null;
 };
 
-export type DashboardMembershipSummary = {
+export type DashboardOwnershipPosition = {
   id: string;
   name: string;
-  purchasePrice: number;
+  membersDescription: string | null;
+  ownershipPercentage: number;
+  participatesInSharedPool: boolean;
+  participatesInGolfPool: boolean;
+  activeMemberCount: number;
+  sharedActivityCount: number;
+  golfRoundsPosition: number | null;
+  golfNightsPosition: number | null;
+};
+
+export type DashboardRecentActivity = {
+  id: string;
+  effectiveDate: string;
+  createdAt: string;
+  transactionType: BenefitTransactionType;
+  status: TransactionStatus;
+  quantityDelta: number;
+  notes: string | null;
+  sourceReference: string | null;
+  ownershipUnitName: string;
+  benefitName: string;
+  pool: BenefitPool;
+  quantityKind: QuantityKind;
+};
+
+export type DashboardExpiration = {
+  benefitGrantId: string;
+  benefitName: string;
+  pool: BenefitPool;
+  quantityKind: QuantityKind;
+  remainingQuantity: number;
+  expirationDate: string;
+  daysRemaining: number;
 };
 
 export type DashboardData = {
-  membership: DashboardMembershipSummary;
-  ownershipUnits: OwnershipUnitOption[];
+  membership: {
+    id: string;
+    name: string;
+    purchasePrice: number;
+    startDate: string;
+    expirationDate: string;
+  };
+  summary: {
+    activeMembers: number;
+    activeOwnershipUnits: number;
+    openReservations: number;
+    pendingApprovals: number;
+    approvedTransactions30d: number;
+    unreconciledBenefits: number;
+    futureExpirations: number;
+  };
   benefits: DashboardBenefitRow[];
-  openReservationsCount: number;
+  ownershipPositions: DashboardOwnershipPosition[];
+  recentActivity: DashboardRecentActivity[];
+  expirations: DashboardExpiration[];
+  generatedAt: string;
 };
 
-// -----------------------------------------------------------------------
-// Internal helpers (not exported -- the UI has no need for these directly)
-// -----------------------------------------------------------------------
+type Payload = {
+  membership: Record<string, unknown>;
+  summary: Record<string, unknown>;
+  benefits: Array<Record<string, unknown>>;
+  ownership_positions: Array<Record<string, unknown>>;
+  recent_activity: Array<Record<string, unknown>>;
+  expirations: Array<Record<string, unknown>>;
+  generated_at: string;
+};
 
-type BenefitBalanceRow = Pick<
-  Database['public']['Views']['benefit_balances']['Row'],
-  | 'id'
-  | 'name'
-  | 'pool'
-  | 'quantity_kind'
-  | 'original_quantity'
-  | 'remaining_quantity'
-  | 'expiration_date'
->;
+type RpcClient = {
+  rpc: (
+    name: string,
+    params: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+};
 
-const BENEFIT_BALANCE_COLUMNS = `
-  id,
-  name,
-  pool,
-  quantity_kind,
-  original_quantity,
-  remaining_quantity,
-  expiration_date
-`;
-
-// public.benefit_balances is a Postgres view, so every column is typed
-// nullable regardless of the underlying benefit_grants constraints
-// (id/name/pool/quantity_kind/original_quantity/remaining_quantity are
-// NOT NULL on the source table -- only expiration_date is genuinely
-// nullable). A null in any of the "always populated" fields here would
-// indicate a schema drift bug, not a valid row to render, so such a row
-// is dropped rather than rendered with invented placeholder text.
-function mapBenefitBalanceRow(row: BenefitBalanceRow): DashboardBenefitRow | null {
-  if (
-    row.id === null ||
-    row.name === null ||
-    row.pool === null ||
-    row.quantity_kind === null ||
-    row.original_quantity === null ||
-    row.remaining_quantity === null
-  ) {
-    return null;
-  }
-
-  return {
-    id: row.id,
-    name: row.name,
-    pool: row.pool,
-    quantityKind: row.quantity_kind,
-    originalQuantity: row.original_quantity,
-    remainingQuantity: row.remaining_quantity,
-    expirationDate: row.expiration_date,
-  };
+function requireSupabase() {
+  if (!supabase) throw new Error('Supabase is not configured.');
+  return supabase;
 }
 
-// -----------------------------------------------------------------------
-// Public service methods
-// -----------------------------------------------------------------------
+function numberValue(value: unknown, label: string): number {
+  const result = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(result)) throw new Error(`Dashboard returned an invalid ${label}.`);
+  return result;
+}
 
-// Bundles everything the Dashboard page needs into one call: the current
-// membership (id/name/purchase_price), its active ownership units, its
-// live benefit balances (original vs. remaining, authoritative per
-// public.benefit_balances -- see the view definition in
-// 20260728033000_initial_schema.sql), and a count of non-voided
-// reservations. Read-only; no accounting, transaction, or reservation
-// data is written or altered.
-export async function getDashboardData(
-  signal?: AbortSignal,
-): Promise<DashboardData> {
-  if (!supabase) {
-    throw new Error('Supabase is not configured.');
+function stringValue(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`Dashboard returned an invalid ${label}.`);
+  return value;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function assertPayload(data: unknown): Payload {
+  if (!data || typeof data !== 'object') throw new Error('Dashboard returned an invalid response.');
+  const value = data as Partial<Payload>;
+  if (
+    !value.membership ||
+    !value.summary ||
+    !Array.isArray(value.benefits) ||
+    !Array.isArray(value.ownership_positions) ||
+    !Array.isArray(value.recent_activity) ||
+    !Array.isArray(value.expirations) ||
+    typeof value.generated_at !== 'string'
+  ) {
+    throw new Error('Dashboard returned an incomplete response.');
   }
+  return value as Payload;
+}
 
-  const membershipSummary = await resolveAccessibleMembership();
+export async function getDashboardData(): Promise<DashboardData> {
+  const client = requireSupabase();
+  const membership = await resolveAccessibleMembership();
+  const rpcClient = client as unknown as RpcClient;
+  const { data, error } = await rpcClient.rpc('get_operational_dashboard_snapshot', {
+    p_membership_id: membership.id,
+  });
 
-  // .abortSignal() must be called before a terminal builder method like
-  // .single() -- it is not available on the resulting thenable, hence
-  // applying it mid-chain here rather than after.
-  let membershipBuilder = supabase
-    .from('memberships')
-    .select('id, name, purchase_price')
-    .eq('id', membershipSummary.id);
+  if (error) throw new Error(error.message);
+  const payload = assertPayload(data);
+  const membershipPayload = payload.membership;
+  const summary = payload.summary;
 
-  let balancesBuilder = supabase
-    .from('benefit_balances')
-    .select(BENEFIT_BALANCE_COLUMNS)
-    .eq('membership_id', membershipSummary.id)
-    .is('archived_at', null)
-    .order('pool', { ascending: true })
-    .order('name', { ascending: true });
-
-  // head: false (i.e. a normal response body) is used deliberately over
-  // head: true here: a HEAD request returns no body, which is more
-  // bandwidth-efficient, but was observed in browser QA to trigger a
-  // benign Chromium DevTools Protocol quirk where a second
-  // Network.loadingFailed (net::ERR_ABORTED) event is emitted for the
-  // same already-succeeded request -- confirmed harmless (exactly one
-  // real request, one real 200 response, correct data rendered) but
-  // avoided outright here since it shows up as a spurious "failed
-  // request" in tooling. The reservations count for one membership is a
-  // handful of rows at most, so the tiny extra response body is immaterial.
-  let reservationsBuilder = supabase
-    .from('reservations')
-    .select('id', { count: 'exact' })
-    .eq('membership_id', membershipSummary.id)
-    .is('voided_at', null);
-
-  if (signal) {
-    membershipBuilder = membershipBuilder.abortSignal(signal);
-    balancesBuilder = balancesBuilder.abortSignal(signal);
-    reservationsBuilder = reservationsBuilder.abortSignal(signal);
+  const membershipId = stringValue(membershipPayload.id, 'membership id');
+  if (membershipId !== membership.id) {
+    throw new Error('Dashboard membership did not match the active membership.');
   }
-
-  const [membershipResult, ownershipUnits, balancesResult, reservationsResult] =
-    await Promise.all([
-      membershipBuilder.single(),
-      getActiveOwnershipUnits(signal),
-      balancesBuilder,
-      reservationsBuilder,
-    ]);
-
-  if (membershipResult.error) {
-    throw new Error(membershipResult.error.message);
-  }
-
-  if (!membershipResult.data) {
-    throw new Error('Membership was not found.');
-  }
-
-  if (balancesResult.error) {
-    throw new Error(balancesResult.error.message);
-  }
-
-  if (reservationsResult.error) {
-    throw new Error(reservationsResult.error.message);
-  }
-
-  const benefits = (balancesResult.data ?? [])
-    .map(mapBenefitBalanceRow)
-    .filter((row): row is DashboardBenefitRow => row !== null);
 
   return {
     membership: {
-      id: membershipResult.data.id,
-      name: membershipResult.data.name,
-      purchasePrice: membershipResult.data.purchase_price,
+      id: membershipId,
+      name: stringValue(membershipPayload.name, 'membership name'),
+      purchasePrice: numberValue(membershipPayload.purchase_price, 'purchase price'),
+      startDate: stringValue(membershipPayload.start_date, 'membership start date'),
+      expirationDate: stringValue(membershipPayload.expiration_date, 'membership expiration date'),
     },
-    ownershipUnits,
-    benefits,
-    openReservationsCount: reservationsResult.count ?? 0,
+    summary: {
+      activeMembers: numberValue(summary.active_members, 'active member count'),
+      activeOwnershipUnits: numberValue(summary.active_ownership_units, 'ownership unit count'),
+      openReservations: numberValue(summary.open_reservations, 'open reservation count'),
+      pendingApprovals: numberValue(summary.pending_approvals, 'pending approval count'),
+      approvedTransactions30d: numberValue(summary.approved_transactions_30d, 'recent approval count'),
+      unreconciledBenefits: numberValue(summary.unreconciled_benefits, 'reconciliation exception count'),
+      futureExpirations: numberValue(summary.future_expirations, 'future expiration count'),
+    },
+    benefits: payload.benefits.map((row) => ({
+      id: stringValue(row.id, 'benefit id'),
+      name: stringValue(row.name, 'benefit name'),
+      pool: stringValue(row.pool, 'benefit pool') as BenefitPool,
+      quantityKind: stringValue(row.quantity_kind, 'quantity kind') as QuantityKind,
+      originalQuantity: numberValue(row.original_quantity, 'original quantity'),
+      remainingQuantity: numberValue(row.remaining_quantity, 'remaining quantity'),
+      expirationDate: nullableString(row.expiration_date),
+    })),
+    ownershipPositions: payload.ownership_positions.map((row) => ({
+      id: stringValue(row.id, 'ownership id'),
+      name: stringValue(row.name, 'ownership name'),
+      membersDescription: nullableString(row.members_description),
+      ownershipPercentage: numberValue(row.ownership_percentage, 'ownership percentage'),
+      participatesInSharedPool: row.participates_in_shared_pool === true,
+      participatesInGolfPool: row.participates_in_golf_pool === true,
+      activeMemberCount: numberValue(row.active_member_count, 'active member count'),
+      sharedActivityCount: numberValue(row.shared_activity_count, 'shared activity count'),
+      golfRoundsPosition: row.golf_rounds_position === null ? null : numberValue(row.golf_rounds_position, 'golf rounds position'),
+      golfNightsPosition: row.golf_nights_position === null ? null : numberValue(row.golf_nights_position, 'golf nights position'),
+    })),
+    recentActivity: payload.recent_activity.map((row) => ({
+      id: stringValue(row.id, 'transaction id'),
+      effectiveDate: stringValue(row.effective_date, 'effective date'),
+      createdAt: stringValue(row.created_at, 'created timestamp'),
+      transactionType: stringValue(row.transaction_type, 'transaction type') as BenefitTransactionType,
+      status: stringValue(row.status, 'transaction status') as TransactionStatus,
+      quantityDelta: numberValue(row.quantity_delta, 'quantity change'),
+      notes: nullableString(row.notes),
+      sourceReference: nullableString(row.source_reference),
+      ownershipUnitName: stringValue(row.ownership_unit_name, 'ownership unit'),
+      benefitName: stringValue(row.benefit_name, 'benefit name'),
+      pool: stringValue(row.pool, 'benefit pool') as BenefitPool,
+      quantityKind: stringValue(row.quantity_kind, 'quantity kind') as QuantityKind,
+    })),
+    expirations: payload.expirations.map((row) => ({
+      benefitGrantId: stringValue(row.benefit_grant_id, 'benefit id'),
+      benefitName: stringValue(row.benefit_name, 'benefit name'),
+      pool: stringValue(row.pool, 'benefit pool') as BenefitPool,
+      quantityKind: stringValue(row.quantity_kind, 'quantity kind') as QuantityKind,
+      remainingQuantity: numberValue(row.remaining_quantity, 'remaining quantity'),
+      expirationDate: stringValue(row.expiration_date, 'expiration date'),
+      daysRemaining: numberValue(row.days_remaining, 'days remaining'),
+    })),
+    generatedAt: payload.generated_at,
   };
 }

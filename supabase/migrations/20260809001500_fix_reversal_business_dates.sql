@@ -4,8 +4,12 @@
 -- therefore receive tomorrow's `current_date`, while the user still considers
 -- the activity part of the current business day. This migration gives each
 -- membership a canonical IANA timezone, uses it for new reversal dates, and
--- evaluates approval/void timestamps in that same timezone for historical
--- accounting snapshots.
+-- interprets reversal/approval/void timestamps in that same timezone for
+-- historical accounting snapshots.
+--
+-- Existing ledger rows remain physically unchanged. Pre-fix reversal rows are
+-- interpreted by their membership-local creation date because the reversal RPC
+-- has always meant "reverse now" and did not expose a caller-selected date.
 
 alter table public.memberships
   add column if not exists business_timezone text;
@@ -60,7 +64,13 @@ as $$
   left join public.benefit_transactions t
     on t.benefit_grant_id = a.benefit_grant_id
    and t.ownership_unit_id = a.ownership_unit_id
-   and t.effective_date <= p_as_of
+   and (
+     case
+       when t.transaction_type = 'reversal'
+         then timezone(m.business_timezone, t.created_at)::date
+       else t.effective_date
+     end
+   ) <= p_as_of
    and t.approved_at is not null
    and timezone(m.business_timezone, t.approved_at)::date <= p_as_of
    and (
@@ -237,23 +247,3 @@ grant execute on function public.create_benefit_reversal(uuid, text, text)
 
 comment on function public.create_benefit_reversal(uuid, text, text) is
   'Creates an append-only reversal using the membership business timezone for effective_date.';
-
--- Repair pre-fix reversal rows whose effective_date was generated from UTC
--- `current_date`. The update is narrowly limited to reversals where the stored
--- date exactly equals the UTC creation date and differs from the membership's
--- local creation date. The normal audit trigger remains enabled, so every
--- repaired row gets a before/after audit event. Only the immutability guard is
--- suspended for this one-time metadata repair.
-alter table public.benefit_transactions
-  disable trigger enforce_transaction_immutability_trg;
-
-update public.benefit_transactions t
-set effective_date = timezone(m.business_timezone, t.created_at)::date
-from public.memberships m
-where m.id = t.membership_id
-  and t.transaction_type = 'reversal'
-  and t.effective_date = t.created_at::date
-  and t.effective_date <> timezone(m.business_timezone, t.created_at)::date;
-
-alter table public.benefit_transactions
-  enable trigger enforce_transaction_immutability_trg;

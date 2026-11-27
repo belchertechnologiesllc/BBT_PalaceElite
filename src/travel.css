@@ -1,0 +1,8 @@
+.travel-panel { padding: 1.25rem; margin-bottom: 1rem; }
+.travel-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.travel-toolbar [aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: -2px; }
+.travel-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; padding-block: .8rem; border-bottom: 1px solid #dce2e7; }
+.travel-row:last-child { border-bottom: 0; }
+.travel-row p { margin: .25rem 0; }
+.travel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .85rem; }
+fieldset.travel-grid { border: 1px solid #dce2e7; border-radius: .5rem; margin: 1rem 0; padding: .9rem; }

@@ -1,3 +1,4 @@
+import { getReservations, today, type Reservation } from '../services/travelService';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../components/layout/PageHeader';
 import {
@@ -73,6 +74,19 @@ export function DashboardPage({ onNavigate }: { onNavigate: (item: NavigationIte
   }, []);
 
   const nextExpiration = data?.expirations[0] ?? null;
+  const [upcomingTrips, setUpcomingTrips] = useState<Reservation[]>([]);
+  const [travelError, setTravelError] = useState('');
+  const membershipId = data?.membership.id;
+  useEffect(() => {
+    if (!membershipId) return;
+    let active = true;
+    void getReservations(membershipId).then(rows => {
+      if (active) setUpcomingTrips(rows.filter(row => row.check_out > today()
+        && ['confirmed', 'tentative'].includes(row.status)));
+    }).catch((error: Error) => { if (active) setTravelError(error.message); });
+    return () => { active = false; };
+  }, [membershipId]);
+
   const reconciliationOk = (data?.summary.unreconciledBenefits ?? 0) === 0;
   const totalOwnership = useMemo(
     () => data?.ownershipPositions.reduce((sum, row) => sum + row.ownershipPercentage, 0) ?? 0,
@@ -98,6 +112,15 @@ export function DashboardPage({ onNavigate }: { onNavigate: (item: NavigationIte
 
       {!loading && !errorMessage && data && (
         <>
+          <section className="panel travel-panel">
+            <h3>Upcoming travel</h3>
+            {travelError && <p role="alert">{travelError}</p>}
+            {!travelError && !upcomingTrips.length && <p>No upcoming reservations.</p>}
+            {upcomingTrips.slice(0, 5).map(trip => <p key={trip.id}>
+              <strong>{trip.resort}</strong> · {trip.check_in} to {trip.check_out} · {trip.status}
+            </p>)}
+            <button className="secondary-button" onClick={() => onNavigate('Reservations')}>View reservations</button>
+          </section>
           <section className="metrics-grid dashboard-metrics" aria-label="Membership summary">
             <article className="metric-card">
               <span>Purchase price</span>

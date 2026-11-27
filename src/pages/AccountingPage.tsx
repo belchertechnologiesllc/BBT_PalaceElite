@@ -201,7 +201,7 @@ export function AccountingPage() {
 
           <section className="accounting-note" role="note">
             <strong>Accounting position, not a booking cap.</strong>
-            <span>A negative unit position is allowed and means that unit has used more than its allocated share. Use transfers or corrective ledger entries to reconcile; prior history is never rewritten.</span>
+            <span>Approvals that would overdraw a unit are blocked. Transfer an allocation to the unit before approving usage beyond its balance.</span>
           </section>
 
           <AccountingPoolSection title="Shared pool" pool="shared" groups={sharedGroups} />

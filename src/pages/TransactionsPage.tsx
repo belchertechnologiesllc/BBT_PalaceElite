@@ -538,6 +538,8 @@ export function TransactionsPage() {
                     {context.transactions.map((transaction) => {
                       const pending = transaction.status === 'draft' || transaction.status === 'submitted';
                       const busy = actionBusyId === transaction.id;
+                      const reservationUsage = transaction.reservationId !== null
+                        && transaction.sourceReference === `reservation:${transaction.reservationId}`;
                       return (
                         <tr key={transaction.id}>
                           <td className="transaction-nowrap">{formatDate(transaction.effectiveDate)}</td>
@@ -548,7 +550,8 @@ export function TransactionsPage() {
                           <td><span className={`transaction-status transaction-status-${transaction.status}`}>{STATUS_LABELS[transaction.status]}</span></td>
                           <td className="transaction-audit-detail">
                             {transaction.notes && <span>{transaction.notes}</span>}
-                            {transaction.sourceReference && <small>Source: {transaction.sourceReference}</small>}
+                            {reservationUsage && <small>Managed in Reservations</small>}
+                            {!reservationUsage && transaction.sourceReference && <small>Source: {transaction.sourceReference}</small>}
                             {transaction.transactionGroupId && <small>Grouped transfer</small>}
                             {transaction.relatedTransactionId && <small>Linked corrective entry</small>}
                           </td>
@@ -556,8 +559,8 @@ export function TransactionsPage() {
                             <div className="transaction-actions">
                               {context.isAdmin && pending && <button type="button" className="secondary-button compact-button" disabled={busy} onClick={() => void approve(transaction)}>Approve</button>}
                               {context.isAdmin && pending && <button type="button" className="text-button danger-text" disabled={busy} onClick={() => openReasonAction('cancel', transaction)}>Cancel</button>}
-                              {context.isAdmin && transaction.status === 'approved' && transaction.transactionType !== 'transfer' && transaction.transactionType !== 'reversal' && <button type="button" className="text-button" disabled={busy} onClick={() => openCorrection(transaction)}>Correct</button>}
-                              {context.isAdmin && transaction.status === 'approved' && transaction.transactionType !== 'reversal' && <button type="button" className="text-button danger-text" disabled={busy} onClick={() => openReasonAction('reverse', transaction)}>Reverse</button>}
+                              {context.isAdmin && !reservationUsage && transaction.status === 'approved' && transaction.transactionType !== 'transfer' && transaction.transactionType !== 'reversal' && <button type="button" className="text-button" disabled={busy} onClick={() => openCorrection(transaction)}>Correct</button>}
+                              {context.isAdmin && !reservationUsage && transaction.status === 'approved' && transaction.transactionType !== 'reversal' && <button type="button" className="text-button danger-text" disabled={busy} onClick={() => openReasonAction('reverse', transaction)}>Reverse</button>}
                               {!context.isAdmin && !pending && <span className="transaction-help">—</span>}
                             </div>
                           </td>

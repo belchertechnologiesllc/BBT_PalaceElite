@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
 import './styles.css';
+import './travel.css';
 import './transactions.css';
 import './accounting.css';
 import './reports.css';

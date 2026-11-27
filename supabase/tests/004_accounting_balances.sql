@@ -66,11 +66,11 @@ select is(
 select ok(
   (
     select abs(sum(allocation_percentage) - 100) < 0.000001
-       and abs(sum(allocated_quantity) - 6) < 0.000001
+       and abs(sum(allocated_quantity) - 4) < 0.000001
     from public.benefit_unit_allocations
     where benefit_grant_id = (select value from accounting_test_ids where key = 'incentive')
   ),
-  'Shared Incentive Stay allocation reconciles to 100 percent and six original stays'
+  'Shared Incentive Stay allocation reconciles to 100 percent and four original stays'
 );
 
 select ok(
@@ -214,11 +214,11 @@ select ok(
     select 1
     from public.benefit_reconciliation r
     where r.benefit_grant_id = (select value from accounting_test_ids where key = 'incentive')
-      and r.grant_remaining_quantity = 5
-      and abs(r.unit_remaining_quantity - 5) < 0.000001
+      and r.grant_remaining_quantity = 3
+      and abs(r.unit_remaining_quantity - 3) < 0.000001
       and r.is_reconciled
   ),
-  'Grant-level five remaining stays reconcile to the sum of unit positions'
+  'Grant-level three remaining stays reconcile to the sum of unit positions'
 );
 
 select ok(
@@ -295,7 +295,7 @@ select 'transfer_group', public.create_benefit_transfer(
   (select value from accounting_test_ids where key = 'incentive'),
   (select value from accounting_test_ids where key = 'belcher'),
   (select value from accounting_test_ids where key = 'tatro'),
-  0.5,
+  0.25,
   current_date,
   'Accounting reconciliation transfer',
   'accounting-test'
@@ -321,14 +321,14 @@ select ok(
     from public.benefit_unit_balances
     where benefit_grant_id = (select value from accounting_test_ids where key = 'incentive')
       and ownership_unit_id = (select value from accounting_test_ids where key = 'belcher')
-      and approved_ledger_delta = -1.5
+      and approved_ledger_delta = -1.25
   )
   and exists (
     select 1
     from public.benefit_unit_balances
     where benefit_grant_id = (select value from accounting_test_ids where key = 'incentive')
       and ownership_unit_id = (select value from accounting_test_ids where key = 'tatro')
-      and approved_ledger_delta = 0.5
+      and approved_ledger_delta = 0.25
   ),
   'Transfer shifts unit positions without rewriting the original allocation'
 );
@@ -338,8 +338,8 @@ select ok(
     select 1
     from public.benefit_reconciliation
     where benefit_grant_id = (select value from accounting_test_ids where key = 'incentive')
-      and grant_remaining_quantity = 5
-      and abs(unit_remaining_quantity - 5) < 0.000001
+      and grant_remaining_quantity = 3
+      and abs(unit_remaining_quantity - 3) < 0.000001
       and is_reconciled
   ),
   'Zero-sum transfer leaves the grant total unchanged and reconciled'

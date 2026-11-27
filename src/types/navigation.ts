@@ -7,6 +7,7 @@ export type NavigationItem =
   | 'Accounting'
   | 'Reports'
   | 'Reservations'
+  | 'Trip calculator'
   | 'Profile'
   | 'Administration';
 
@@ -19,6 +20,7 @@ export const navigationItems: NavigationItem[] = [
   'Accounting',
   'Reports',
   'Reservations',
+  'Trip calculator',
   'Profile',
   'Administration',
 ];

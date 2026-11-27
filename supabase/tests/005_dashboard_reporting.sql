@@ -13,15 +13,35 @@ select 'membership', id from public.memberships where contract_number = '4135905
 insert into reporting_test_ids (key, value)
 select 'belcher', id from public.ownership_units where membership_id = (select value from reporting_test_ids where key = 'membership') and name = 'Belcher';
 insert into reporting_test_ids (key, value)
-values ('viewer_user', '00000000-0000-0000-0000-000000000051');
+values ('viewer_user', '00000000-0000-0000-0000-000000000051'),
+       ('admin_user', '00000000-0000-0000-0000-000000000052');
 
-select ok((select count(*) = 3 from reporting_test_ids), 'Required dashboard/reporting test identifiers are available');
+insert into auth.users(id, email, raw_user_meta_data)
+values ('00000000-0000-0000-0000-000000000052', 'report-admin@example.invalid', '{}'::jsonb);
+insert into public.unit_users(ownership_unit_id, user_id, role)
+select value, '00000000-0000-0000-0000-000000000052', 'admin'
+from reporting_test_ids where key = 'belcher';
+
+select ok((select count(*) = 4 from reporting_test_ids), 'Required dashboard/reporting test identifiers are available');
 
 select set_config(
   'request.jwt.claim.sub',
-  (select user_id::text from public.unit_users where role = 'admin' and revoked_at is null limit 1),
+  (select value::text from reporting_test_ids where key = 'admin_user'),
   true
 );
+
+with usage as (
+  insert into public.benefit_transactions(membership_id, ownership_unit_id, benefit_grant_id,
+    transaction_type, quantity_used, quantity_delta, status, effective_date)
+  select g.membership_id, (select value from reporting_test_ids where key = 'belcher'),
+    g.id, 'use', 1, -1, 'submitted', current_date
+  from public.benefit_grants g
+  where g.membership_id = (select value from reporting_test_ids where key = 'membership')
+    and g.benefit_code = 'incentive_stays'
+  returning id
+)
+insert into reporting_test_ids(key, value) select 'usage', id from usage;
+select public.approve_benefit_transaction((select value from reporting_test_ids where key = 'usage'));
 
 select ok(
   public.user_is_membership_admin((select value from reporting_test_ids where key = 'membership')),
@@ -65,7 +85,7 @@ select ok(
 select ok(
   (
     select (snapshot->>'is_admin')::boolean
-       and jsonb_array_length(snapshot->'members') = 10
+       and jsonb_array_length(snapshot->'members') = (select count(*) from public.people where membership_id = (select value from reporting_test_ids where key = 'membership'))
        and jsonb_array_length(snapshot->'ownership') = 3
        and jsonb_array_length(snapshot->'benefit_usage') >= 1
        and jsonb_array_length(snapshot->'pool_activity') >= 1

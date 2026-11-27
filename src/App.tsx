@@ -8,9 +8,11 @@ import { BenefitsPage } from './pages/BenefitsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { MembersPage } from './pages/MembersPage';
 import { OwnershipPage } from './pages/OwnershipPage';
-import { PlaceholderPage } from './pages/PlaceholderPage';
+import { AdministrationPage } from "./pages/AdministrationPage";
 import { ProfilePage } from './pages/ProfilePage';
 import { ReportsPage } from './pages/ReportsPage';
+import { ReservationsPage } from './pages/ReservationsPage';
+import { TripCalculatorPage } from './pages/TripCalculatorPage';
 import { TransactionsPage } from './pages/TransactionsPage';
 import type { NavigationItem } from './types/navigation';
 
@@ -74,14 +76,20 @@ export default function App() {
       case 'Accounting':
         return <AccountingPage />;
 
+      case 'Reservations':
+        return <ReservationsPage />;
+
+      case 'Trip calculator':
+        return <TripCalculatorPage />;
+
       case 'Reports':
         return <ReportsPage />;
 
       case 'Profile':
         return <ProfilePage />;
 
-      default:
-        return <PlaceholderPage page={activePage} />;
+      case 'Administration':
+        return <AdministrationPage openBenefits={() => handleNavigation('Benefits')} />;
     }
   };
 

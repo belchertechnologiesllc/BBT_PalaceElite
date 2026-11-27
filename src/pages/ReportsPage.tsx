@@ -1,3 +1,4 @@
+import { ContractReconciliation } from './ContractReconciliation';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { PageHeader } from '../components/layout/PageHeader';
 import {
@@ -185,7 +186,7 @@ function ReportExportButtons<T>({
 }
 
 export function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<ReportTab>('members');
+  const [activeTab, setActiveTab] = useState<ReportTab>('benefit-usage');
   const [fromDate, setFromDate] = useState(daysAgoLocal(90));
   const [toDate, setToDate] = useState(todayLocal());
   const [snapshot, setSnapshot] = useState<ReportingSnapshot | null>(null);
@@ -228,6 +229,7 @@ export function ReportsPage() {
         subtitle="Operational reports derived from the membership, ownership, benefit ledger, pool accounting, and audit history."
       />
 
+      <ContractReconciliation />
       <section className="panel report-filter-panel">
         <div className="panel-heading reports-filter-heading">
           <div>

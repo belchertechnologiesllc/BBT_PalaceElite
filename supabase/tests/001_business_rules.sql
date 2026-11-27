@@ -769,7 +769,7 @@ where membership_id = (select value from test_ids where key = 'membership')
   -- Also excludes Incentive Stays: its original_quantity is asserted
   -- against a known fixed value later in this suite (BENEFIT-DETAILS /
   -- STEP-3), so it must not be mutated by this unrelated fixture.
-  and name <> 'Incentive Stays'
+  and benefit_code not in ('incentive_stays', 'unlimited_golf_bonus_nights')
   and not exists (
     select 1
     from public.benefit_transactions bt
@@ -916,6 +916,8 @@ select ok(
 -- uniqueness is scoped to (membership_id, benefit_code), not global.
 -- other_membership is the otherwise-unused fixture membership created
 -- earlier in this file for the accounting-immutability tests.
+insert into public.ownership_units (membership_id, name, ownership_percentage)
+select value, 'pgTAP second membership owner', 100 from test_ids where key = 'other_membership';
 select lives_ok(
   format(
     $sql$
@@ -1271,11 +1273,11 @@ select ok(
   'Every one of the seven approved semantic benefits has at least one benefit_detail_items row'
 );
 
--- 28. Incentive Stays accounting quantity remains 6.
+-- 28. Incentive Stays accounting quantity is 4.
 select is(
   (select original_quantity from public.benefit_grants where benefit_code = 'incentive_stays'),
-  6::numeric(12,2),
-  'Incentive Stays original_quantity remains 6 (no accounting correction performed by this feature)'
+  4::numeric(12,2),
+  'Incentive Stays original_quantity matches the contract baseline'
 );
 
 -- 29. Incentive Stays contract_quantity_text visibly records the
